@@ -1,0 +1,14 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "build": "echo \"Backend runs directly in Bun without compiling.\""
+  },
+  "dependencies": {
+    "shared": "workspace:*"
+  }
+}

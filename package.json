@@ -1,0 +1,17 @@
+{
+  "name": "bobs-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "bun --cwd packages/backend dev",
+    "dev:frontend": "bun --cwd packages/frontend dev",
+    "build:frontend": "bun --cwd packages/frontend build",
+    "build": "bun run build:frontend",
+    "start": "bun --cwd packages/backend start"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

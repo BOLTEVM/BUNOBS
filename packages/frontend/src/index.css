@@ -1,0 +1,281 @@
+:root {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: #E2E8F0;
+  background-color: #080A10;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Theme colors */
+  --bg-main: #06080E;
+  --bg-panel: #0E121E;
+  --bg-panel-header: #141A29;
+  --bg-card: rgba(22, 28, 45, 0.4);
+  --border-color: #1F2A3F;
+  --border-hover: #374E75;
+  
+  --accent: #5F5DEC;
+  --accent-glow: rgba(95, 93, 236, 0.35);
+  --accent-hover: #4E4CE0;
+  
+  --success: #10B981;
+  --success-glow: rgba(16, 185, 129, 0.3);
+  --danger: #EF4444;
+  --danger-glow: rgba(239, 68, 68, 0.35);
+  --warning: #F59E0B;
+  
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg-main);
+  background-image: radial-gradient(at 0% 0%, rgba(95, 93, 236, 0.08) 0px, transparent 50%),
+                    radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.03) 0px, transparent 50%);
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-panel);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+/* Glassmorphism Panel styles */
+.glass-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-panel:hover {
+  border-color: rgba(95, 93, 236, 0.2);
+}
+
+/* Inputs */
+input, select, textarea {
+  background: #111625;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: 6px;
+  outline: none;
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-weight: 500;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #4E4CE0);
+  color: #FFF;
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+.btn-primary:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 16px var(--accent-glow);
+}
+
+.btn-secondary {
+  background: #1E293B;
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+.btn-secondary:hover {
+  background: #2D3D54;
+  border-color: var(--border-hover);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, var(--danger), #D32F2F);
+  color: #FFF;
+  box-shadow: 0 4px 12px var(--danger-glow);
+}
+.btn-danger:hover {
+  filter: brightness(1.1);
+}
+
+/* Tooltips & Helpers */
+.badge-live {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  box-shadow: 0 0 10px var(--success-glow);
+}
+
+.badge-rec {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 10px var(--danger-glow);
+}
+
+/* Sound mixer decibel indicators */
+.db-meter-track {
+  position: relative;
+  background: #090D16;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.db-meter-fill {
+  width: 100%;
+  background: linear-gradient(to top, #10B981 0%, #10B981 60%, #F59E0B 80%, #EF4444 100%);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  transition: height 0.05s ease-out;
+  border-radius: 2px;
+}
+
+/* Volume Slider styling */
+input[type="range"].volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+}
+
+input[type="range"].volume-slider::-webkit-slider-runnable-track {
+  background: #151C2C;
+  height: 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+}
+
+input[type="range"].volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  background-color: var(--accent);
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  box-shadow: 0 0 4px var(--accent-glow);
+  transition: transform 0.1s;
+}
+
+input[type="range"].volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* Custom list items select state */
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  background: rgba(20, 26, 41, 0.3);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.list-item:hover {
+  background: rgba(20, 26, 41, 0.6);
+  border-color: rgba(95, 93, 236, 0.15);
+}
+
+.list-item.active {
+  background: rgba(95, 93, 236, 0.12);
+  border-color: var(--accent);
+}
+
+.list-item-title {
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.list-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.list-item:hover .list-item-actions,
+.list-item.active .list-item-actions {
+  opacity: 1;
+}
+
+.list-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+}
+
+.list-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
