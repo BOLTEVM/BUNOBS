@@ -2,11 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Tv, Camera, Image as ImageIcon, Type, Palette, Video as VideoIcon,
   Play, Square, Volume2, VolumeX, Eye, EyeOff, Plus, Trash2,
-  Layers, Sliders, Settings, Radio, Info, Maximize2
+  Layers, Sliders, Settings, Radio, Info, Maximize2, Monitor, Gamepad2
 } from 'lucide-react';
 import type { Scene, Source, ServerStatus, StreamConfig, SourceType } from 'shared';
 import { compositor } from './utils/Compositor';
 import { audioMixer } from './utils/AudioMix';
+import { analyzeCaptureCompatibility, createCaptureSettings, getCaptureProfile, isCaptureSource } from './utils/CaptureIntelligence';
 import { AddSourceModal } from './components/AddSourceModal';
 import { SettingsModal } from './components/SettingsModal';
 
@@ -15,7 +16,7 @@ import { SettingsModal } from './components/SettingsModal';
 const INITIAL_SCENES: Scene[] = [
   {
     id: 'scene-intro',
-    name: '🔴 Branded Intro',
+    name: 'Branded Intro',
     sources: [
       {
         id: 'intro-bg',
@@ -91,7 +92,7 @@ const INITIAL_SCENES: Scene[] = [
   },
   {
     id: 'scene-gaming',
-    name: '🎮 Desktop + Camera',
+    name: 'Desktop + Camera',
     sources: [
       {
         id: 'game-bg',
@@ -110,7 +111,7 @@ const INITIAL_SCENES: Scene[] = [
       },
       {
         id: 'gaming-screen',
-        name: 'Screen Ingest Placeholder',
+        name: 'Display Capture',
         type: 'screen',
         x: 40,
         y: 40,
@@ -121,7 +122,7 @@ const INITIAL_SCENES: Scene[] = [
         visible: true,
         muted: false,
         volume: 0.8,
-        settings: {}
+        settings: createCaptureSettings('screen')
       },
       {
         id: 'gaming-camera',
@@ -150,7 +151,7 @@ export const App: React.FC = () => {
   // UI states
   const [scenes, setScenes] = useState<Scene[]>(INITIAL_SCENES);
   const [activeSceneId, setActiveSceneId] = useState('scene-intro');
-  const [programSceneId] = useState('scene-intro');
+  const [programSceneId, setProgramSceneId] = useState('scene-intro');
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [studioMode, setStudioMode] = useState(true);
   
@@ -194,6 +195,7 @@ export const App: React.FC = () => {
 
   // Real-time decibel states for audio visualizer
   const [audioLevels, setAudioLevels] = useState<Record<string, number>>({});
+  const [activeMediaSourceIds, setActiveMediaSourceIds] = useState<Set<string>>(new Set());
 
   // 1. Establish connection to Bun Backend WebSocket
   useEffect(() => {
@@ -254,7 +256,8 @@ export const App: React.FC = () => {
       compositor.setCanvases(previewCanvasRef.current, programCanvasRef.current);
       compositor.setCallbacks(
         (id) => setSelectedSourceId(id),
-        (updatedScenes) => setScenes(updatedScenes)
+        (updatedScenes) => setScenes(updatedScenes),
+        (sceneId) => setProgramSceneId(sceneId)
       );
     }
   }, [previewCanvasRef, programCanvasRef, width, height]);
@@ -267,7 +270,13 @@ export const App: React.FC = () => {
       if (activeScene) {
         const levels: Record<string, number> = {};
         activeScene.sources.forEach((source) => {
-          if (source.type === 'camera' || source.type === 'screen' || source.type === 'video') {
+          if (
+            source.type === 'camera' ||
+            source.type === 'screen' ||
+            source.type === 'window' ||
+            source.type === 'game' ||
+            source.type === 'video'
+          ) {
             levels[source.id] = audioMixer.getAudioLevel(source.id);
           }
         });
@@ -320,7 +329,7 @@ export const App: React.FC = () => {
     let initialX = 100;
     let initialY = 100;
 
-    if (type === 'screen' || type === 'color') {
+    if (type === 'screen' || type === 'window' || type === 'game' || type === 'color') {
       initialWidth = 1280;
       initialHeight = 720;
       initialX = 0;
@@ -343,71 +352,9 @@ export const App: React.FC = () => {
       settings
     };
 
-    // Initialize media sources
-    if (type === 'screen') {
-      try {
-        console.log('[Media] Triggering display capture...');
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: 30 },
-          audio: true // request system audio capture
-        });
-
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.muted = true; // prevent loop feedback locally
-        video.playsInline = true;
-        video.play();
-
-        compositor.registerMediaElement(newSourceId, video);
-        audioMixer.connectScreenAudio(newSourceId, stream);
-      } catch (e) {
-        console.error('Screen capture rejected:', e);
-        return;
-      }
-    } 
-    else if (type === 'camera') {
-      try {
-        console.log(`[Media] Triggering camera capture (device: ${settings.deviceId})...`);
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: settings.deviceId ? { deviceId: { exact: settings.deviceId } } : true,
-          audio: true
-        });
-
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.muted = true;
-        video.playsInline = true;
-        video.play();
-
-        compositor.registerMediaElement(newSourceId, video);
-        audioMixer.connectMicrophone(newSourceId, stream);
-      } catch (e) {
-        console.error('Camera capture rejected:', e);
-        return;
-      }
-    }
-    else if (type === 'image') {
-      const img = new Image();
-      img.src = settings.mediaUrl;
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        newSource.width = img.naturalWidth || 400;
-        newSource.height = img.naturalHeight || 300;
-        compositor.registerMediaElement(newSourceId, img);
-        triggerSceneRefresh();
-      };
-    }
-    else if (type === 'video') {
-      const video = document.createElement('video');
-      video.src = settings.mediaUrl;
-      video.loop = true;
-      video.muted = false;
-      video.playsInline = true;
-      video.crossOrigin = 'anonymous';
-      video.play();
-
-      compositor.registerMediaElement(newSourceId, video);
-      audioMixer.connectMediaElement(newSourceId, video);
+    const activated = await activateSourceMedia(newSource);
+    if (!activated && (type === 'screen' || type === 'window' || type === 'game' || type === 'camera' || type === 'video')) {
+      return;
     }
 
     // Append to active scene
@@ -425,9 +372,108 @@ export const App: React.FC = () => {
     compositor.setSelectedSource(newSourceId);
   };
 
+  const activateSourceMedia = async (source: Source): Promise<boolean> => {
+    if (compositor.getMediaElement(source.id)) {
+      setActiveMediaSourceIds((current) => new Set(current).add(source.id));
+      return true;
+    }
+
+    if (isCaptureSource(source.type)) {
+      try {
+        console.log(`[Media] Triggering ${source.type} capture...`, source.settings);
+        const [compatibilityNotice] = analyzeCaptureCompatibility(source);
+        if (compatibilityNotice?.level === 'warning') {
+          console.warn(`[Capture] ${compatibilityNotice.message}`);
+        }
+        const captureProfile = getCaptureProfile(source.type);
+        const displayMediaOptions = {
+          video: {
+            frameRate: 30,
+            cursor: source.settings.captureCursor === false ? 'never' : 'always',
+            displaySurface: captureProfile?.browserSurface === 'monitor' ? 'monitor' : 'window'
+          },
+          audio: source.settings.captureAudio !== false
+        } as DisplayMediaStreamOptions;
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          ...displayMediaOptions
+        });
+
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.muted = true; // prevent loop feedback locally
+        video.playsInline = true;
+        video.play();
+
+        compositor.registerMediaElement(source.id, video);
+        if (source.settings.captureAudio !== false) {
+          audioMixer.connectScreenAudio(source.id, stream);
+        }
+        setActiveMediaSourceIds((current) => new Set(current).add(source.id));
+      } catch (e) {
+        console.error('Screen capture rejected:', e);
+        return false;
+      }
+    } 
+    else if (source.type === 'camera') {
+      try {
+        console.log(`[Media] Triggering camera capture (device: ${source.settings.deviceId})...`);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: source.settings.deviceId ? { deviceId: { exact: source.settings.deviceId } } : true,
+          audio: true
+        });
+
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.muted = true;
+        video.playsInline = true;
+        video.play();
+
+        compositor.registerMediaElement(source.id, video);
+        audioMixer.connectMicrophone(source.id, stream);
+        setActiveMediaSourceIds((current) => new Set(current).add(source.id));
+      } catch (e) {
+        console.error('Camera capture rejected:', e);
+        return false;
+      }
+    }
+    else if (source.type === 'image') {
+      const img = new Image();
+      img.src = source.settings.mediaUrl || '';
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        source.width = img.naturalWidth || source.width;
+        source.height = img.naturalHeight || source.height;
+        compositor.registerMediaElement(source.id, img);
+        setActiveMediaSourceIds((current) => new Set(current).add(source.id));
+        triggerSceneRefresh();
+      };
+    }
+    else if (source.type === 'video') {
+      const video = document.createElement('video');
+      video.src = source.settings.mediaUrl || '';
+      video.loop = true;
+      video.muted = false;
+      video.playsInline = true;
+      video.crossOrigin = 'anonymous';
+      video.play();
+
+      compositor.registerMediaElement(source.id, video);
+      audioMixer.connectMediaElement(source.id, video);
+      setActiveMediaSourceIds((current) => new Set(current).add(source.id));
+    }
+
+    return true;
+  };
+
   const deleteSource = (sourceId: string) => {
     // Disconnect audio
     audioMixer.disconnectSource(sourceId);
+    compositor.releaseMediaElementById(sourceId);
+    setActiveMediaSourceIds((current) => {
+      const next = new Set(current);
+      next.delete(sourceId);
+      return next;
+    });
 
     const updated = scenes.map((scene) => {
       if (scene.id === activeSceneId) {
@@ -443,6 +489,18 @@ export const App: React.FC = () => {
     if (selectedSourceId === sourceId) {
       compositor.setSelectedSource(null);
     }
+  };
+
+  const updateSource = (sourceId: string, updates: Partial<Source>) => {
+    setScenes((currentScenes) => currentScenes.map((scene) => {
+      if (scene.id !== activeSceneId) return scene;
+      return {
+        ...scene,
+        sources: scene.sources.map((source) => (
+          source.id === sourceId ? { ...source, ...updates } : source
+        ))
+      };
+    }));
   };
 
   // --- WebSocket Streaming / Recording Activation ---
@@ -579,6 +637,15 @@ export const App: React.FC = () => {
   };
 
   const activeScene = scenes.find((s) => s.id === activeSceneId);
+  const isCapturableSource = (source: Source) => (
+    isCaptureSource(source.type) || source.type === 'camera'
+  );
+  const getCaptureLabel = (source: Source) => {
+    const captureProfile = getCaptureProfile(source.type);
+    if (captureProfile) return captureProfile.activationLabel;
+    return 'camera ingest';
+  };
+  const isSourceMediaActive = (source: Source) => activeMediaSourceIds.has(source.id) || Boolean(compositor.getMediaElement(source.id));
 
   return (
     <div style={appContainerStyle}>
@@ -601,7 +668,7 @@ export const App: React.FC = () => {
           <div style={statBoxStyle}>
             <span style={statLabelStyle}>STATUS</span>
             <span style={{ ...statValueStyle, color: wsConnected ? '#10B981' : '#F59E0B' }}>
-              ● {wsConnected ? 'Connected' : 'Offline'}
+              {wsConnected ? 'Connected' : 'Offline'}
             </span>
           </div>
 
@@ -669,21 +736,21 @@ export const App: React.FC = () => {
                   className="btn-secondary"
                   style={transBtnStyle}
                 >
-                  ◀ Cut
+                  Cut
                 </button>
                 <button
                   onClick={() => compositor.triggerTransition('fade', 400)}
                   className="btn-primary"
                   style={transBtnStyle}
                 >
-                  ◀ Fade (400ms)
+                  Fade (400ms)
                 </button>
                 <button
                   onClick={() => compositor.triggerTransition('slide', 600)}
                   className="btn-secondary"
                   style={transBtnStyle}
                 >
-                  ◀ Slide (600ms)
+                  Slide (600ms)
                 </button>
               </div>
             )}
@@ -740,6 +807,7 @@ export const App: React.FC = () => {
                 <div style={emptyDeckStyle}>No sources in this scene.</div>
               ) : (
                 activeScene?.sources
+                  .slice()
                   .sort((a, b) => b.zIndex - a.zIndex) // Display list front-to-back (topmost layer on top)
                   .map((src) => (
                     <div
@@ -749,6 +817,8 @@ export const App: React.FC = () => {
                     >
                       <div className="list-item-title">
                         {src.type === 'screen' && <Tv size={14} color="#8B5CF6" />}
+                        {src.type === 'window' && <Monitor size={14} color="#38BDF8" />}
+                        {src.type === 'game' && <Gamepad2 size={14} color="#F97316" />}
                         {src.type === 'camera' && <Camera size={14} color="#10B981" />}
                         {src.type === 'image' && <ImageIcon size={14} color="#38BDF8" />}
                         {src.type === 'text' && <Type size={14} color="#F472B6" />}
@@ -758,26 +828,38 @@ export const App: React.FC = () => {
                       </div>
 
                       <div className="list-item-actions">
+                        {/* Activate capture source */}
+                        {isCapturableSource(src) && !isSourceMediaActive(src) && (
+                          <button
+                            className="list-action-btn"
+                            title={`Activate ${getCaptureLabel(src)}`}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await activateSourceMedia(src);
+                            }}
+                          >
+                            <Play size={13} color="#10B981" />
+                          </button>
+                        )}
                         {/* Visible toggle */}
                         <button
                           className="list-action-btn"
                           onClick={(e) => {
                             e.stopPropagation();
-                            src.visible = !src.visible;
-                            triggerSceneRefresh();
+                            updateSource(src.id, { visible: !src.visible });
                           }}
                         >
                           {src.visible ? <Eye size={13} /> : <EyeOff size={13} color="#EF4444" />}
                         </button>
                         {/* Audio Mute toggle */}
-                        {(src.type === 'camera' || src.type === 'screen' || src.type === 'video') && (
+                        {(src.type === 'camera' || src.type === 'screen' || src.type === 'window' || src.type === 'game' || src.type === 'video') && (
                           <button
                             className="list-action-btn"
                             onClick={(e) => {
                               e.stopPropagation();
-                              src.muted = !src.muted;
-                              audioMixer.setMute(src.id, src.muted);
-                              triggerSceneRefresh();
+                              const muted = !src.muted;
+                              updateSource(src.id, { muted });
+                              audioMixer.setMute(src.id, muted);
                             }}
                           >
                             {src.muted ? <VolumeX size={13} color="#EF4444" /> : <Volume2 size={13} />}
@@ -807,7 +889,7 @@ export const App: React.FC = () => {
             </div>
             <div style={{ ...deckBodyStyle, display: 'flex', gap: '20px', overflowX: 'auto', flexDirection: 'row' }}>
               {activeScene?.sources
-                .filter((s) => s.type === 'camera' || s.type === 'screen' || s.type === 'video')
+                .filter((s) => s.type === 'camera' || s.type === 'screen' || s.type === 'window' || s.type === 'game' || s.type === 'video')
                 .map((src) => {
                   const level = audioLevels[src.id] || 0;
                   return (
@@ -833,17 +915,16 @@ export const App: React.FC = () => {
                           value={src.volume}
                           onChange={(e) => {
                             const val = Number(e.target.value);
-                            src.volume = val;
+                            updateSource(src.id, { volume: val });
                             audioMixer.setVolume(src.id, val);
-                            triggerSceneRefresh();
                           }}
                           style={{ transform: 'rotate(-90deg)', width: '60px', height: '10px', margin: '20px 0' }}
                         />
                         <button
                           onClick={() => {
-                            src.muted = !src.muted;
-                            audioMixer.setMute(src.id, src.muted);
-                            triggerSceneRefresh();
+                            const muted = !src.muted;
+                            updateSource(src.id, { muted });
+                            audioMixer.setMute(src.id, muted);
                           }}
                           style={src.muted ? mixerMutedBtnStyle : mixerAudioBtnStyle}
                         >
@@ -853,7 +934,7 @@ export const App: React.FC = () => {
                     </div>
                   );
                 })}
-              {activeScene?.sources.filter((s) => s.type === 'camera' || s.type === 'screen' || s.type === 'video').length === 0 && (
+              {activeScene?.sources.filter((s) => s.type === 'camera' || s.type === 'screen' || s.type === 'window' || s.type === 'game' || s.type === 'video').length === 0 && (
                 <div style={emptyDeckStyle}>No audio inputs active.</div>
               )}
             </div>

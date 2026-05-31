@@ -1,4 +1,11 @@
-export type SourceType = 'screen' | 'camera' | 'image' | 'text' | 'color' | 'video';
+export type SourceType = 'screen' | 'window' | 'game' | 'camera' | 'image' | 'text' | 'color' | 'video';
+
+export type CaptureMethod = 'automatic' | 'windows-graphics-capture' | 'bitblt' | 'browser-picker';
+export type WindowMatchPriority =
+  | 'title-then-type'
+  | 'title-then-executable'
+  | 'exact-title';
+export type GameCaptureMode = 'specific-window' | 'any-fullscreen' | 'foreground-hotkey';
 
 export interface Source {
   id: string;
@@ -28,9 +35,32 @@ export interface Source {
     // For type === 'color'
     colorHex?: string;
 
-    // For type === 'camera' or 'screen'
+    // For type === 'camera'
     deviceId?: string;
     trackId?: string;
+
+    // For type === 'screen', 'window', or 'game'
+    captureMethod?: CaptureMethod;
+    captureAudio?: boolean;
+    captureCursor?: boolean;
+    forceSdr?: boolean;
+
+    // For type === 'screen'
+    displayId?: string;
+    displayLabel?: string;
+
+    // For type === 'window' or 'game'
+    windowTitle?: string;
+    windowExecutable?: string;
+    windowMatchPriority?: WindowMatchPriority;
+
+    // For type === 'window'
+    clientArea?: boolean;
+
+    // For type === 'game'
+    gameCaptureMode?: GameCaptureMode;
+    sliCrossfireCaptureMode?: boolean;
+    allowTransparency?: boolean;
   };
 }
 

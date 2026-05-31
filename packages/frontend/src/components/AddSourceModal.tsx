@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { X, Tv, Camera, Image, Type, Palette, Video } from 'lucide-react';
-import type { SourceType } from 'shared';
+import { X, Tv, Camera, Image, Type, Palette, Video, Monitor, Gamepad2 } from 'lucide-react';
+import type { CaptureMethod, GameCaptureMode, SourceType, WindowMatchPriority } from 'shared';
+import { analyzeCaptureCompatibility, createCaptureSettings } from '../utils/CaptureIntelligence';
 
 interface AddSourceModalProps {
   isOpen: boolean;
@@ -24,11 +25,24 @@ export const AddSourceModal: React.FC<AddSourceModalProps> = ({
   const [mediaUrl, setMediaUrl] = useState('');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [captureMethod, setCaptureMethod] = useState<CaptureMethod>('automatic');
+  const [captureAudio, setCaptureAudio] = useState(false);
+  const [captureCursor, setCaptureCursor] = useState(true);
+  const [clientArea, setClientArea] = useState(true);
+  const [forceSdr, setForceSdr] = useState(false);
+  const [windowMatchPriority, setWindowMatchPriority] = useState<WindowMatchPriority>('title-then-executable');
+  const [windowTitle, setWindowTitle] = useState('');
+  const [windowExecutable, setWindowExecutable] = useState('');
+  const [gameCaptureMode, setGameCaptureMode] = useState<GameCaptureMode>('specific-window');
+  const [sliCrossfireCaptureMode, setSliCrossfireCaptureMode] = useState(false);
+  const [allowTransparency, setAllowTransparency] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
+      if (isOpen) {
       // Set default name on type change
-      if (type === 'screen') setName('Screen Capture');
+      if (type === 'screen') setName('Display Capture');
+      else if (type === 'window') setName('Window Capture');
+      else if (type === 'game') setName('Game Capture');
       else if (type === 'camera') setName('Webcam Video');
       else if (type === 'image') setName('Overlay Logo');
       else if (type === 'text') setName('Text Banner');
@@ -64,6 +78,30 @@ export const AddSourceModal: React.FC<AddSourceModalProps> = ({
       settings = { mediaUrl };
     } else if (type === 'camera') {
       settings = { deviceId: selectedDeviceId };
+    } else if (type === 'screen') {
+      settings = createCaptureSettings(type, { captureMethod, captureAudio, captureCursor, forceSdr });
+    } else if (type === 'window') {
+      settings = createCaptureSettings(type, {
+        captureMethod,
+        captureAudio,
+        captureCursor,
+        clientArea,
+        forceSdr,
+        windowMatchPriority,
+        windowTitle,
+        windowExecutable
+      });
+    } else if (type === 'game') {
+      settings = createCaptureSettings(type, {
+        captureMethod,
+        captureAudio,
+        windowMatchPriority,
+        windowTitle,
+        windowExecutable,
+        gameCaptureMode,
+        sliCrossfireCaptureMode,
+        allowTransparency
+      });
     }
 
     onAddSource(type, name, settings);
@@ -72,12 +110,28 @@ export const AddSourceModal: React.FC<AddSourceModalProps> = ({
 
   const sourceTypes: { value: SourceType; label: string; icon: React.ReactNode; desc: string }[] = [
     { value: 'screen', label: 'Screen Share', icon: <Tv size={18} />, desc: 'Capture any desktop screen, application window, or browser tab' },
+    { value: 'window', label: 'Window Capture', icon: <Monitor size={18} />, desc: 'Capture a specific application window with OBS-style match rules' },
+    { value: 'game', label: 'Game Capture', icon: <Gamepad2 size={18} />, desc: 'Model game/window capture properties for game-focused scenes' },
     { value: 'camera', label: 'Video Capture (Webcam)', icon: <Camera size={18} />, desc: 'Capture your local camera device feed' },
     { value: 'image', label: 'Image Overlay', icon: <Image size={18} />, desc: 'Overlay PNG/JPG images or transparent graphics' },
     { value: 'text', label: 'Text Source', icon: <Type size={18} />, desc: 'Render text banners, titles, or lower thirds' },
     { value: 'color', label: 'Color Background', icon: <Palette size={18} />, desc: 'Solid color background plane' },
     { value: 'video', label: 'Video File', icon: <Video size={18} />, desc: 'Play local media files or video loops' },
   ];
+  const capturePreviewSettings = createCaptureSettings(type, {
+    captureMethod,
+    captureAudio,
+    captureCursor,
+    clientArea,
+    forceSdr,
+    windowMatchPriority,
+    windowTitle,
+    windowExecutable,
+    gameCaptureMode,
+    sliCrossfireCaptureMode,
+    allowTransparency
+  });
+  const compatibilityNotices = analyzeCaptureCompatibility({ type, settings: capturePreviewSettings });
 
   return (
     <div style={modalOverlayStyle}>
@@ -190,7 +244,7 @@ export const AddSourceModal: React.FC<AddSourceModalProps> = ({
                   style={{ width: '100%', marginBottom: '12px' }}
                 />
                 <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0 }}>
-                  💡 Tip: You can paste a public URL or use relative paths like <code>/0logov3.png</code>.
+                  Tip: You can paste a public URL or use relative paths like <code>/0logov3.png</code>.
                 </p>
               </div>
             )}
@@ -200,7 +254,7 @@ export const AddSourceModal: React.FC<AddSourceModalProps> = ({
                 <label style={labelStyle}>Webcam Input Device</label>
                 {devices.length === 0 ? (
                   <p style={{ fontSize: '0.8rem', color: '#EF4444', margin: 0 }}>
-                    ⚠️ No webcam hardware discovered. Please grant browser permissions or plug in a device.
+                    No webcam hardware discovered. Please grant browser permissions or plug in a device.
                   </p>
                 ) : (
                   <select
@@ -218,10 +272,106 @@ export const AddSourceModal: React.FC<AddSourceModalProps> = ({
               </div>
             )}
 
-            {type === 'screen' && (
+            {(type === 'screen' || type === 'window' || type === 'game') && (
               <div style={subFormStyle}>
+                <label style={labelStyle}>Capture Method</label>
+                <select value={captureMethod} onChange={(e) => setCaptureMethod(e.target.value as CaptureMethod)} style={{ width: '100%' }}>
+                  <option value="automatic">Automatic</option>
+                  <option value="browser-picker">Browser picker</option>
+                  <option value="windows-graphics-capture">Windows Graphics Capture</option>
+                  <option value="bitblt">BitBlt compatibility</option>
+                </select>
+
+                {(type === 'window' || type === 'game') && (
+                  <>
+                    <label style={labelStyle}>Target Window</label>
+                    <input
+                      type="text"
+                      value={windowTitle}
+                      onChange={(e) => setWindowTitle(e.target.value)}
+                      placeholder={type === 'game' ? 'e.g. BOLT - Brave' : 'e.g. Meta Horizon - Google Chrome'}
+                      style={{ width: '100%' }}
+                    />
+
+                    <label style={labelStyle}>Executable</label>
+                    <input
+                      type="text"
+                      value={windowExecutable}
+                      onChange={(e) => setWindowExecutable(e.target.value)}
+                      placeholder={type === 'game' ? 'brave.exe' : 'chrome.exe'}
+                      style={{ width: '100%' }}
+                    />
+
+                    <label style={labelStyle}>Window Match Priority</label>
+                    <select value={windowMatchPriority} onChange={(e) => setWindowMatchPriority(e.target.value as WindowMatchPriority)} style={{ width: '100%' }}>
+                      <option value="title-then-executable">Match title, otherwise same executable</option>
+                      <option value="title-then-type">Match title, otherwise same window type</option>
+                      <option value="exact-title">Exact title only</option>
+                    </select>
+                  </>
+                )}
+
+                {type === 'game' && (
+                  <>
+                    <label style={labelStyle}>Mode</label>
+                    <select value={gameCaptureMode} onChange={(e) => setGameCaptureMode(e.target.value as GameCaptureMode)} style={{ width: '100%' }}>
+                      <option value="specific-window">Capture specific window</option>
+                      <option value="any-fullscreen">Capture any fullscreen application</option>
+                      <option value="foreground-hotkey">Capture foreground window with hotkey</option>
+                    </select>
+                  </>
+                )}
+
+                <label style={checkboxRowStyle}>
+                  <input type="checkbox" checked={captureAudio} onChange={(e) => setCaptureAudio(e.target.checked)} />
+                  Capture Audio
+                </label>
+                {type !== 'game' && (
+                  <label style={checkboxRowStyle}>
+                    <input type="checkbox" checked={captureCursor} onChange={(e) => setCaptureCursor(e.target.checked)} />
+                    Capture Cursor
+                  </label>
+                )}
+                {type === 'window' && (
+                  <label style={checkboxRowStyle}>
+                    <input type="checkbox" checked={clientArea} onChange={(e) => setClientArea(e.target.checked)} />
+                    Client Area
+                  </label>
+                )}
+                {type !== 'game' && (
+                  <label style={checkboxRowStyle}>
+                    <input type="checkbox" checked={forceSdr} onChange={(e) => setForceSdr(e.target.checked)} />
+                    Force SDR
+                  </label>
+                )}
+                {type === 'game' && (
+                  <>
+                    <label style={checkboxRowStyle}>
+                      <input type="checkbox" checked={sliCrossfireCaptureMode} onChange={(e) => setSliCrossfireCaptureMode(e.target.checked)} />
+                      SLI/Crossfire Capture Mode
+                    </label>
+                    <label style={checkboxRowStyle}>
+                      <input type="checkbox" checked={allowTransparency} onChange={(e) => setAllowTransparency(e.target.checked)} />
+                      Allow Transparency
+                    </label>
+                  </>
+                )}
+
+                {compatibilityNotices.map((notice) => (
+                  <p
+                    key={notice.message}
+                    style={{
+                      fontSize: '0.78rem',
+                      color: notice.level === 'warning' ? '#FCA5A5' : '#A5B4FC',
+                      margin: 0,
+                      lineHeight: 1.35
+                    }}
+                  >
+                    {notice.message}
+                  </p>
+                ))}
                 <p style={{ fontSize: '0.82rem', color: '#A5B4FC', margin: 0, padding: '10px', background: 'rgba(95, 93, 236, 0.08)', border: '1px solid rgba(95, 93, 236, 0.2)', borderRadius: '6px' }}>
-                  📺 Click **Create Source** then authorize screensharing. You can capture entire desktops, dual screens, chrome tabs, or application windows!
+                  Browser capture uses the system picker at activation time. Window and game matching settings are stored as source intent for native capture bridges.
                 </p>
               </div>
             )}
@@ -256,8 +406,8 @@ const modalOverlayStyle: React.CSSProperties = {
 };
 
 const modalContainerStyle: React.CSSProperties = {
-  width: '680px',
-  height: '460px',
+  width: '760px',
+  height: '620px',
   display: 'flex',
   flexDirection: 'column',
   background: '#0D111A'
@@ -354,6 +504,14 @@ const subFormStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '8px'
+};
+
+const checkboxRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  color: '#CBD5E1',
+  fontSize: '0.82rem'
 };
 
 const modalFooterStyle: React.CSSProperties = {

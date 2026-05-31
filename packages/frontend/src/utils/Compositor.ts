@@ -47,6 +47,8 @@ export class Compositor {
   // Callbacks for UI updates
   private onSelectedSourceChange: ((sourceId: string | null) => void) | null = null;
   private onScenesUpdate: ((scenes: Scene[]) => void) | null = null;
+  private onProgramSceneChange: ((sceneId: string) => void) | null = null;
+  private interactionAbortController: AbortController | null = null;
 
   constructor(width = 1280, height = 720) {
     this.width = width;
@@ -76,21 +78,19 @@ export class Compositor {
 
   setCallbacks(
     onSelectedSourceChange: (sourceId: string | null) => void,
-    onScenesUpdate: (scenes: Scene[]) => void
+    onScenesUpdate: (scenes: Scene[]) => void,
+    onProgramSceneChange?: (sceneId: string) => void
   ) {
     this.onSelectedSourceChange = onSelectedSourceChange;
     this.onScenesUpdate = onScenesUpdate;
+    this.onProgramSceneChange = onProgramSceneChange ?? null;
   }
 
   destroy() {
     this.isLoopRunning = false;
-    this.mediaCache.forEach((el) => {
-      if (el instanceof HTMLVideoElement) {
-        el.pause();
-        el.srcObject = null;
-        el.src = '';
-      }
-    });
+    this.interactionAbortController?.abort();
+    this.interactionAbortController = null;
+    this.mediaCache.forEach((el) => this.releaseMediaElement(el));
     this.mediaCache.clear();
   }
 
@@ -117,7 +117,14 @@ export class Compositor {
     const currentMediaIds = new Set<string>();
     scenes.forEach((scene) => {
       scene.sources.forEach((source) => {
-        if (source.type === 'camera' || source.type === 'screen' || source.type === 'image' || source.type === 'video') {
+        if (
+          source.type === 'camera' ||
+          source.type === 'screen' ||
+          source.type === 'window' ||
+          source.type === 'game' ||
+          source.type === 'image' ||
+          source.type === 'video'
+        ) {
           currentMediaIds.add(source.id);
         }
       });
@@ -125,18 +132,10 @@ export class Compositor {
 
     this.mediaCache.forEach((el, id) => {
       if (!currentMediaIds.has(id)) {
-        if (el instanceof HTMLVideoElement) {
-          el.pause();
-          el.srcObject = null;
-          el.src = '';
-        }
+        this.releaseMediaElement(el);
         this.mediaCache.delete(id);
       }
     });
-
-    if (this.onScenesUpdate) {
-      this.onScenesUpdate([...this.scenes]);
-    }
   }
 
   setActiveScene(sceneId: string) {
@@ -146,6 +145,7 @@ export class Compositor {
 
   setProgramScene(sceneId: string) {
     this.programSceneId = sceneId;
+    this.onProgramSceneChange?.(sceneId);
   }
 
   setSelectedSource(sourceId: string | null) {
@@ -157,11 +157,35 @@ export class Compositor {
 
   // Bind a standard HTML element to a source ID for rendering
   registerMediaElement(sourceId: string, element: HTMLVideoElement | HTMLImageElement) {
+    const existing = this.mediaCache.get(sourceId);
+    if (existing && existing !== element) {
+      this.releaseMediaElement(existing);
+    }
     this.mediaCache.set(sourceId, element);
   }
 
   getMediaElement(sourceId: string): HTMLVideoElement | HTMLImageElement | undefined {
     return this.mediaCache.get(sourceId);
+  }
+
+  releaseMediaElementById(sourceId: string) {
+    const element = this.mediaCache.get(sourceId);
+    if (element) {
+      this.releaseMediaElement(element);
+      this.mediaCache.delete(sourceId);
+    }
+  }
+
+  private releaseMediaElement(element: HTMLVideoElement | HTMLImageElement) {
+    if (element instanceof HTMLVideoElement) {
+      element.pause();
+      const stream = element.srcObject;
+      if (stream instanceof MediaStream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      element.srcObject = null;
+      element.src = '';
+    }
   }
 
   // Trigger studio transition from Preview (activeScene) to Program
@@ -170,6 +194,7 @@ export class Compositor {
     
     if (type === 'cut') {
       this.programSceneId = this.activeSceneId;
+      this.onProgramSceneChange?.(this.programSceneId);
       return;
     }
 
@@ -244,6 +269,7 @@ export class Compositor {
       if (progress >= 1) {
         // Transition finished
         this.programSceneId = trans.toSceneId;
+        this.onProgramSceneChange?.(this.programSceneId);
         trans.isTransitioning = false;
         
         const finalScene = this.scenes.find((s) => s.id === this.programSceneId);
@@ -393,22 +419,30 @@ export class Compositor {
 
       case 'camera':
       case 'screen':
+      case 'window':
+      case 'game':
       case 'video': {
         const video = this.mediaCache.get(source.id) as HTMLVideoElement;
         if (video && video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
           ctx.drawImage(video, x, y, w, h);
         } else {
           // Draw beautiful themed feed placeholders
-          ctx.strokeStyle = source.type === 'screen' ? '#8B5CF6' : '#10B981';
+          ctx.strokeStyle = source.type === 'screen' ? '#8B5CF6' : source.type === 'window' ? '#38BDF8' : source.type === 'game' ? '#F97316' : '#10B981';
           ctx.lineWidth = 2;
           ctx.strokeRect(x, y, w, h);
-          ctx.fillStyle = source.type === 'screen' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+          ctx.fillStyle = source.type === 'screen' ? 'rgba(139, 92, 246, 0.15)' : source.type === 'window' ? 'rgba(56, 189, 248, 0.15)' : source.type === 'game' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(16, 185, 129, 0.15)';
           ctx.fillRect(x, y, w, h);
           
           ctx.fillStyle = '#E2E8F0';
           ctx.font = '14px Outfit';
           ctx.textAlign = 'center';
-          const label = source.type === 'screen' ? `📺 Screenshare: ${source.name}` : `📷 Webcam: ${source.name}`;
+          const label = source.type === 'screen'
+            ? `Display: ${source.name}`
+            : source.type === 'window'
+              ? `Window: ${source.name}`
+              : source.type === 'game'
+                ? `Game: ${source.name}`
+                : `Webcam: ${source.name}`;
           ctx.fillText(label, x + w / 2, y + h / 2);
         }
         break;
@@ -458,6 +492,9 @@ export class Compositor {
   // --- Interaction Setup (WYSIWYG click, drag and resize) ---
   private setupInteractions() {
     if (!this.canvasPreview) return;
+    this.interactionAbortController?.abort();
+    this.interactionAbortController = new AbortController();
+    const { signal } = this.interactionAbortController;
 
     const getCanvasMousePos = (e: MouseEvent) => {
       const rect = this.canvasPreview!.getBoundingClientRect();
@@ -505,7 +542,7 @@ export class Compositor {
       } else {
         this.setSelectedSource(null);
       }
-    });
+    }, { signal });
 
     window.addEventListener('mousemove', (e) => {
       if (!this.canvasPreview || (!this.isDragging && !this.isResizing)) return;
@@ -560,7 +597,7 @@ export class Compositor {
           source.height = Math.round(newH);
         }
       }
-    });
+    }, { signal });
 
     const stopAction = () => {
       if (this.isDragging || this.isResizing) {
@@ -575,7 +612,7 @@ export class Compositor {
       }
     };
 
-    window.addEventListener('mouseup', stopAction);
+    window.addEventListener('mouseup', stopAction, { signal });
   }
 
   // Check if click position hit one of the 8 handles of a source

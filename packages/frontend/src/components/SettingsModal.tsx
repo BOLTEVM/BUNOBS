@@ -84,19 +84,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onClick={() => setActiveTab('stream')}
               style={activeTab === 'stream' ? tabActiveStyle : tabStyle}
             >
-              📡 Stream Output
+              Stream Output
             </button>
             <button
               onClick={() => setActiveTab('video')}
               style={activeTab === 'video' ? tabActiveStyle : tabStyle}
             >
-              🖥️ Video Canvas
+              Video Canvas
             </button>
             <button
               onClick={() => setActiveTab('recordings')}
               style={activeTab === 'recordings' ? tabActiveStyle : tabStyle}
             >
-              🎥 Saved Recordings
+              Saved Recordings
             </button>
           </div>
 
@@ -211,7 +211,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
                           <span style={recNameStyle} title={rec.name}>{rec.name}</span>
                           <span style={recMetaStyle}>
-                            📅 {new Date(rec.createdAt).toLocaleString()} | 💾 {(rec.sizeBytes / 1024 / 1024).toFixed(2)} MB
+                            {new Date(rec.createdAt).toLocaleString()} | {(rec.sizeBytes / 1024 / 1024).toFixed(2)} MB
                           </span>
                         </div>
                         <a
@@ -429,4 +429,3 @@ const modalFooterStyle: React.CSSProperties = {
   borderTop: '1px solid #1F2A3F',
   background: '#121724'
 };
-

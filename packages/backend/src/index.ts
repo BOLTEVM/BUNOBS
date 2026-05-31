@@ -1,9 +1,25 @@
-import { join } from 'path';
+import { basename, isAbsolute, join, relative, resolve } from 'path';
 import { readdirSync, statSync, existsSync } from 'fs';
 import { ffmpeg } from './ffmpeg';
 import type { ServerMessage, ClientMessage, StreamConfig, RecordingInfo, ServerStatus } from 'shared';
 
 const HTTP_PORT = 3001;
+
+function isPathInside(parent: string, child: string): boolean {
+  const resolvedRelative = relative(resolve(parent), resolve(child));
+  return resolvedRelative === '' || (!resolvedRelative.startsWith('..') && !isAbsolute(resolvedRelative));
+}
+
+function jsonResponse(payload: unknown, init?: ResponseInit): Response {
+  return new Response(JSON.stringify(payload), {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      ...init?.headers,
+    },
+  });
+}
 
 // Helper to get recording details
 function getRecordingsList(): RecordingInfo[] {
@@ -94,15 +110,14 @@ const server = Bun.serve({
 
     // 2. API Endpoints
     if (url.pathname === '/api/recordings') {
-      return new Response(JSON.stringify(getRecordingsList()), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      });
+      return jsonResponse(getRecordingsList());
     }
 
     if (url.pathname.startsWith('/api/recordings/download/')) {
-      const filename = url.pathname.replace('/api/recordings/download/', '');
-      const filepath = join(ffmpeg.getRecordingsDir(), filename);
-      if (existsSync(filepath) && filename.endsWith('.mp4')) {
+      const filename = basename(decodeURIComponent(url.pathname.replace('/api/recordings/download/', '')));
+      const recordingsDir = ffmpeg.getRecordingsDir();
+      const filepath = resolve(recordingsDir, filename);
+      if (filename.endsWith('.mp4') && isPathInside(recordingsDir, filepath) && existsSync(filepath)) {
         const file = Bun.file(filepath);
         return new Response(file, {
           headers: {
@@ -116,12 +131,13 @@ const server = Bun.serve({
     }
 
     // 3. Serve frontend assets in production / fallback
-    const frontendDist = join(import.meta.dir, '..', '..', 'frontend', 'dist');
-    let filepath = join(frontendDist, url.pathname === '/' ? 'index.html' : url.pathname);
+    const frontendDist = resolve(import.meta.dir, '..', '..', 'frontend', 'dist');
+    const requestedPath = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname);
+    let filepath = resolve(frontendDist, `.${requestedPath}`);
 
     // Fallback to index.html if the file doesn't exist (Single Page App routing)
-    if (!existsSync(filepath) || statSync(filepath).isDirectory()) {
-      filepath = join(frontendDist, 'index.html');
+    if (!isPathInside(frontendDist, filepath) || !existsSync(filepath) || statSync(filepath).isDirectory()) {
+      filepath = resolve(frontendDist, 'index.html');
     }
 
     if (existsSync(filepath)) {
