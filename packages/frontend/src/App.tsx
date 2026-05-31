@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Tv, Camera, Image as ImageIcon, Type, Palette, Video as VideoIcon,
   Play, Square, Volume2, VolumeX, Eye, EyeOff, Plus, Trash2,
-  Layers, Sliders, Settings, Radio, Info, Maximize2, Monitor, Gamepad2
+  Layers, Sliders, Settings, Radio, Info, Maximize2, Monitor, Gamepad2, Download, Upload
 } from 'lucide-react';
 import type { Scene, Source, ServerStatus, StreamConfig, SourceType } from 'shared';
 import { compositor } from './utils/Compositor';
@@ -192,6 +192,9 @@ export const App: React.FC = () => {
   // WebSocket media ingestion recorder
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
+  // File input ref for scene collection imports
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   // Real-time decibel states for audio visualizer
   const [audioLevels, setAudioLevels] = useState<Record<string, number>>({});
@@ -249,6 +252,52 @@ export const App: React.FC = () => {
   useEffect(() => {
     compositor.setScenes(scenes, activeSceneId, programSceneId);
   }, [scenes, activeSceneId, programSceneId]);
+
+  // Global Hotkey Listener (inspired by OBS Studio core hotkeys)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore key events if the user is typing in a text input / textarea / contenteditable
+      if (
+        document.activeElement instanceof HTMLInputElement ||
+        document.activeElement instanceof HTMLTextAreaElement ||
+        document.activeElement?.getAttribute('contenteditable') === 'true'
+      ) {
+        return;
+      }
+
+      // 1. Action Toggles (Ctrl + Alt)
+      if (e.ctrlKey && e.altKey) {
+        if (e.key.toLowerCase() === 's') {
+          e.preventDefault();
+          if (serverStatus.isStreaming) stopStreaming();
+          else startStreaming();
+        }
+        if (e.key.toLowerCase() === 'r') {
+          e.preventDefault();
+          if (serverStatus.isRecording) stopRecording();
+          else startRecording();
+        }
+        if (e.key.toLowerCase() === 't') {
+          e.preventDefault();
+          compositor.triggerTransition('fade', 400);
+        }
+      }
+
+      // 2. Scene Switchers (Keys 1 to 9)
+      const keyNum = parseInt(e.key);
+      if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 9) {
+        const targetScene = scenes[keyNum - 1];
+        if (targetScene && targetScene.id !== activeSceneId) {
+          e.preventDefault();
+          setActiveSceneId(targetScene.id);
+          compositor.setActiveScene(targetScene.id);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [scenes, activeSceneId, serverStatus.isStreaming, serverStatus.isRecording, streamConfig]);
 
   // Hook canvases to compositor once loaded
   useEffect(() => {
@@ -646,6 +695,50 @@ export const App: React.FC = () => {
     return 'camera ingest';
   };
   const isSourceMediaActive = (source: Source) => activeMediaSourceIds.has(source.id) || Boolean(compositor.getMediaElement(source.id));
+  const handleExportSetup = () => {
+    const collection = {
+      scenes,
+      activeSceneId,
+      programSceneId,
+      streamConfig
+    };
+    const blob = new Blob([JSON.stringify(collection, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bobs_scene_collection_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportSetup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.scenes && Array.isArray(data.scenes)) {
+          setScenes(data.scenes);
+          if (data.activeSceneId) {
+            setActiveSceneId(data.activeSceneId);
+            compositor.setActiveScene(data.activeSceneId);
+          }
+          if (data.streamConfig) {
+            setStreamConfig(data.streamConfig);
+            compositor.updateResolution(data.streamConfig.resolution.width, data.streamConfig.resolution.height);
+          }
+          alert('Scene collection imported successfully!');
+        } else {
+          alert('Invalid scene collection file format.');
+        }
+      } catch (err) {
+        alert('Failed to parse scene collection JSON.');
+      }
+    };
+    reader.readAsText(file);
+  };
 
   return (
     <div style={appContainerStyle}>
@@ -699,6 +792,29 @@ export const App: React.FC = () => {
 
         {/* Header Controls */}
         <div style={{ display: 'flex', gap: '10px' }}>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImportSetup}
+            accept=".json"
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="btn-secondary"
+            style={{ padding: '8px 12px', fontSize: '0.8rem' }}
+            title="Import Scene Collection"
+          >
+            <Upload size={14} /> Import Setup
+          </button>
+          <button
+            onClick={handleExportSetup}
+            className="btn-secondary"
+            style={{ padding: '8px 12px', fontSize: '0.8rem' }}
+            title="Export Scene Collection"
+          >
+            <Download size={14} /> Export Setup
+          </button>
           <button
             onClick={() => setStudioMode(!studioMode)}
             style={studioMode ? activeStudioBtnStyle : studioBtnStyle}
