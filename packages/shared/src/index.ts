@@ -61,6 +61,12 @@ export interface Source {
     gameCaptureMode?: GameCaptureMode;
     sliCrossfireCaptureMode?: boolean;
     allowTransparency?: boolean;
+
+    // Chroma Key Video DSP Filters
+    chromaKeyEnabled?: boolean;
+    chromaKeyColor?: string;
+    chromaKeySimilarity?: number;
+    chromaKeySmoothness?: number;
   };
 }
 

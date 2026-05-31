@@ -25,6 +25,10 @@ export class Compositor {
   
   // HTML media elements cached for rendering: id -> HTMLVideoElement | HTMLImageElement
   private mediaCache = new Map<string, HTMLVideoElement | HTMLImageElement>();
+
+  // Offscreen scratch canvas for real-time DSP filter pipeline
+  private filterCanvas = document.createElement('canvas');
+  private filterCtx = this.filterCanvas.getContext('2d', { willReadFrequently: true });
   
   // Interaction/WYSIWYG states
   private selectedSourceId: string | null = null;
@@ -208,6 +212,66 @@ export class Compositor {
     };
   }
 
+  // --- Real-time Video Chroma Key Filter ---
+  private applyChromaKey(
+    media: HTMLVideoElement | HTMLImageElement,
+    width: number,
+    height: number,
+    targetColor: string,      // Hex color code, e.g. '#00ff00'
+    similarity: number,        // Closeness threshold (0.0 to 1.0)
+    smoothness: number        // Soft-feather range (0.0 to 1.0)
+  ): HTMLCanvasElement | null {
+    if (!this.filterCtx) return null;
+
+    // Constrain scratch dimensions for maximum CPU rendering performance
+    this.filterCanvas.width = width;
+    this.filterCanvas.height = height;
+
+    // Draw active media frame
+    this.filterCtx.drawImage(media, 0, 0, width, height);
+
+    // Extract frame pixels
+    const imgData = this.filterCtx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+
+    // Parse target hex color into RGB coordinates
+    const hex = targetColor.replace('#', '');
+    const tr = parseInt(hex.substring(0, 2), 16);
+    const tg = parseInt(hex.substring(2, 4), 16);
+    const tb = parseInt(hex.substring(4, 6), 16);
+
+    // High performance pixel-level green screen keying loop
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+
+      if (a === 0) continue;
+
+      // Color distance logic in RGB space
+      const diffR = r - tr;
+      const diffG = g - tg;
+      const diffB = b - tb;
+
+      // Normalized distance (max RGB vector length is ~442.0)
+      const distance = Math.sqrt(diffR * diffR + diffG * diffG + diffB * diffB) / 442.0;
+
+      if (distance < similarity) {
+        // Complete backdrop transparent keying
+        data[i + 3] = 0;
+      } else if (distance < similarity + smoothness) {
+        // Soft edge feathering gradient interpolation
+        const factor = (distance - similarity) / smoothness;
+        data[i + 3] = Math.min(Math.round(a * factor), 255);
+      }
+    }
+
+    // Paint pixels back
+    this.filterCtx.putImageData(imgData, 0, 0);
+    return this.filterCanvas;
+  }
+
   // --- Rendering Loop ---
   private renderLoop = () => {
     if (!this.isLoopRunning) return;
@@ -371,6 +435,10 @@ export class Compositor {
     ctx.globalAlpha = source.opacity;
 
     const { x, y, width: w, height: h } = source;
+    const chromaEnabled = source.settings.chromaKeyEnabled ?? false;
+    const chromaColor = source.settings.chromaKeyColor ?? '#00ff00';
+    const chromaSimilarity = source.settings.chromaKeySimilarity ?? 0.4;
+    const chromaSmoothness = source.settings.chromaKeySmoothness ?? 0.1;
 
     switch (source.type) {
       case 'color': {
@@ -401,7 +469,12 @@ export class Compositor {
       case 'image': {
         const img = this.mediaCache.get(source.id) as HTMLImageElement;
         if (img && img.complete) {
-          ctx.drawImage(img, x, y, w, h);
+          if (chromaEnabled) {
+            const keyedCanvas = this.applyChromaKey(img, source.width, source.height, chromaColor, chromaSimilarity, chromaSmoothness);
+            ctx.drawImage(keyedCanvas || img, x, y, w, h);
+          } else {
+            ctx.drawImage(img, x, y, w, h);
+          }
         } else {
           // Placeholder drawing while image loads
           ctx.strokeStyle = '#38BDF8';
@@ -424,7 +497,12 @@ export class Compositor {
       case 'video': {
         const video = this.mediaCache.get(source.id) as HTMLVideoElement;
         if (video && video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
-          ctx.drawImage(video, x, y, w, h);
+          if (chromaEnabled) {
+            const keyedCanvas = this.applyChromaKey(video, source.width, source.height, chromaColor, chromaSimilarity, chromaSmoothness);
+            ctx.drawImage(keyedCanvas || video, x, y, w, h);
+          } else {
+            ctx.drawImage(video, x, y, w, h);
+          }
         } else {
           // Draw beautiful themed feed placeholders
           ctx.strokeStyle = source.type === 'screen' ? '#8B5CF6' : source.type === 'window' ? '#38BDF8' : source.type === 'game' ? '#F97316' : '#10B981';

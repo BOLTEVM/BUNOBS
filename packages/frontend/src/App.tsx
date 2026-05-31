@@ -10,6 +10,7 @@ import { audioMixer } from './utils/AudioMix';
 import { analyzeCaptureCompatibility, createCaptureSettings, getCaptureProfile, isCaptureSource } from './utils/CaptureIntelligence';
 import { AddSourceModal } from './components/AddSourceModal';
 import { SettingsModal } from './components/SettingsModal';
+import { FiltersModal } from './components/FiltersModal';
 
 
 // Pre-configured default scenes & sources
@@ -158,6 +159,8 @@ export const App: React.FC = () => {
   // Modals
   const [isAddSourceOpen, setIsAddSourceOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [filterSource, setFilterSource] = useState<Source | null>(null);
 
   // Status and Server States
   const [ws, setWs] = useState<WebSocket | null>(null);
@@ -739,6 +742,23 @@ export const App: React.FC = () => {
     };
     reader.readAsText(file);
   };
+  const handleUpdateSourceSettings = (sourceId: string, settings: any) => {
+    const updated = scenes.map((scene) => {
+      if (scene.id === activeSceneId) {
+        return {
+          ...scene,
+          sources: scene.sources.map((src) => {
+            if (src.id === sourceId) {
+              return { ...src, settings };
+            }
+            return src;
+          })
+        };
+      }
+      return scene;
+    });
+    setScenes(updated);
+  };
 
   return (
     <div style={appContainerStyle}>
@@ -981,6 +1001,18 @@ export const App: React.FC = () => {
                             {src.muted ? <VolumeX size={13} color="#EF4444" /> : <Volume2 size={13} />}
                           </button>
                         )}
+                        {/* Filters configuration */}
+                        <button
+                          className="list-action-btn"
+                          title="Filters (Chroma Key, Gates, Compression)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFilterSource(src);
+                            setIsFiltersOpen(true);
+                          }}
+                        >
+                          <Sliders size={13} color="#A5B4FC" />
+                        </button>
                         {/* Delete source */}
                         <button
                           className="list-action-btn"
@@ -1110,6 +1142,12 @@ export const App: React.FC = () => {
             ws.send(JSON.stringify({ type: 'configure-stream', payload: newConfig }));
           }
         }}
+      />
+      <FiltersModal
+        isOpen={isFiltersOpen}
+        onClose={() => setIsFiltersOpen(false)}
+        source={filterSource}
+        onUpdateSourceSettings={handleUpdateSourceSettings}
       />
     </div>
   );

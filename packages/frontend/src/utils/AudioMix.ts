@@ -1,7 +1,9 @@
 export interface AudioSourceNodeGroup {
   sourceNode: AudioNode;
-  gainNode: GainNode;
-  analyserNode: AnalyserNode;
+  gateNode: GainNode;                    // Dynamic noise gate gain node
+  compressorNode: DynamicsCompressorNode; // Vocal dynamics compressor
+  gainNode: GainNode;                    // Main user volume slider
+  analyserNode: AnalyserNode;            // Output level analyzer
 }
 
 export class AudioMixer {
@@ -12,6 +14,10 @@ export class AudioMixer {
   // Track configurations locally
   private volumes = new Map<string, number>(); // sourceId -> volume (0..1)
   private mutes = new Map<string, boolean>();   // sourceId -> isMuted
+  
+  // DSP Filter state tracks
+  private gateEnabledStates = new Map<string, boolean>();
+  private compressorEnabledStates = new Map<string, boolean>();
 
   init() {
     if (this.ctx) return;
@@ -35,12 +41,87 @@ export class AudioMixer {
     return this.dest ? this.dest.stream : null;
   }
 
+  // Set filter toggles
+  setGateEnabled(sourceId: string, enabled: boolean) {
+    this.gateEnabledStates.set(sourceId, enabled);
+    console.log(`[AudioMixer] Gate toggle for ${sourceId}: ${enabled}`);
+  }
+
+  setCompressorEnabled(sourceId: string, enabled: boolean) {
+    this.compressorEnabledStates.set(sourceId, enabled);
+    const group = this.nodes.get(sourceId);
+    if (group && this.ctx) {
+      if (enabled) {
+        // High-quality broadcast vocal compression settings
+        group.compressorNode.threshold.setValueAtTime(-24, this.ctx.currentTime);
+        group.compressorNode.knee.setValueAtTime(30, this.ctx.currentTime);
+        group.compressorNode.ratio.setValueAtTime(12, this.ctx.currentTime);
+        group.compressorNode.attack.setValueAtTime(0.003, this.ctx.currentTime);
+        group.compressorNode.release.setValueAtTime(0.25, this.ctx.currentTime);
+      } else {
+        // Disable compression by resetting threshold to 0dB
+        group.compressorNode.threshold.setValueAtTime(0, this.ctx.currentTime);
+      }
+      console.log(`[AudioMixer] Compressor configured for ${sourceId}: ${enabled}`);
+    }
+  }
+
+  getGateEnabled(sourceId: string): boolean {
+    return this.gateEnabledStates.get(sourceId) ?? false;
+  }
+
+  getCompressorEnabled(sourceId: string): boolean {
+    return this.compressorEnabledStates.get(sourceId) ?? false;
+  }
+
+  // Helper to establish DSP routing chain
+  private createSourceChain(sourceNode: AudioNode, sourceId: string): AudioSourceNodeGroup {
+    if (!this.ctx || !this.dest) {
+      throw new Error('AudioContext not initialized');
+    }
+
+    const gateNode = this.ctx.createGain();
+    const compressorNode = this.ctx.createDynamicsCompressor();
+    const gainNode = this.ctx.createGain();
+    const analyserNode = this.ctx.createAnalyser();
+    analyserNode.fftSize = 256;
+
+    // Route chain: Source -> Gate (Noise Gate) -> Compressor (Dynamics) -> Gain (Volume) -> Analyser -> Dest
+    sourceNode.connect(gateNode);
+    gateNode.connect(compressorNode);
+    compressorNode.connect(gainNode);
+    gainNode.connect(analyserNode);
+    analyserNode.connect(this.dest);
+
+    // Apply cached volume and mute settings
+    const vol = this.volumes.has(sourceId) ? this.volumes.get(sourceId)! : 0.8;
+    const mute = this.mutes.has(sourceId) ? this.mutes.get(sourceId)! : false;
+    gainNode.gain.setValueAtTime(mute ? 0 : vol, this.ctx.currentTime);
+    
+    // Apply cached filter settings
+    const compEnabled = this.compressorEnabledStates.get(sourceId) ?? false;
+
+    if (compEnabled) {
+      compressorNode.threshold.setValueAtTime(-24, this.ctx.currentTime);
+      compressorNode.knee.setValueAtTime(30, this.ctx.currentTime);
+      compressorNode.ratio.setValueAtTime(12, this.ctx.currentTime);
+      compressorNode.attack.setValueAtTime(0.003, this.ctx.currentTime);
+      compressorNode.release.setValueAtTime(0.25, this.ctx.currentTime);
+    } else {
+      compressorNode.threshold.setValueAtTime(0, this.ctx.currentTime);
+    }
+
+    this.volumes.set(sourceId, vol);
+    this.mutes.set(sourceId, mute);
+
+    return { sourceNode, gateNode, compressorNode, gainNode, analyserNode };
+  }
+
   // Route a microphone MediaStream
   connectMicrophone(sourceId: string, stream: MediaStream) {
     this.init();
     if (!this.ctx || !this.dest) return;
 
-    // Disconnect old nodes if exist
     this.disconnectSource(sourceId);
 
     const audioTracks = stream.getAudioTracks();
@@ -51,25 +132,9 @@ export class AudioMixer {
 
     try {
       const sourceNode = this.ctx.createMediaStreamSource(stream);
-      const gainNode = this.ctx.createGain();
-      const analyserNode = this.ctx.createAnalyser();
-      analyserNode.fftSize = 256;
-
-      // Routing: Source -> Gain -> Analyser -> Destination
-      sourceNode.connect(gainNode);
-      gainNode.connect(analyserNode);
-      analyserNode.connect(this.dest);
-
-      // Apply initial values
-      const vol = this.volumes.has(sourceId) ? this.volumes.get(sourceId)! : 0.8;
-      const mute = this.mutes.has(sourceId) ? this.mutes.get(sourceId)! : false;
-      
-      gainNode.gain.setValueAtTime(mute ? 0 : vol, this.ctx.currentTime);
-      this.volumes.set(sourceId, vol);
-      this.mutes.set(sourceId, mute);
-
-      this.nodes.set(sourceId, { sourceNode, gainNode, analyserNode });
-      console.log(`[AudioMixer] Connected microphone source: ${sourceId}`);
+      const nodeGroup = this.createSourceChain(sourceNode, sourceId);
+      this.nodes.set(sourceId, nodeGroup);
+      console.log(`[AudioMixer] Connected microphone source with DSP: ${sourceId}`);
     } catch (err) {
       console.error('[AudioMixer] Error connecting mic:', err);
     }
@@ -84,29 +149,14 @@ export class AudioMixer {
 
     const audioTracks = stream.getAudioTracks();
     if (audioTracks.length === 0) {
-      // Screen share has no audio, ignore
       return;
     }
 
     try {
       const sourceNode = this.ctx.createMediaStreamSource(stream);
-      const gainNode = this.ctx.createGain();
-      const analyserNode = this.ctx.createAnalyser();
-      analyserNode.fftSize = 256;
-
-      sourceNode.connect(gainNode);
-      gainNode.connect(analyserNode);
-      analyserNode.connect(this.dest);
-
-      const vol = this.volumes.has(sourceId) ? this.volumes.get(sourceId)! : 0.8;
-      const mute = this.mutes.has(sourceId) ? this.mutes.get(sourceId)! : false;
-
-      gainNode.gain.setValueAtTime(mute ? 0 : vol, this.ctx.currentTime);
-      this.volumes.set(sourceId, vol);
-      this.mutes.set(sourceId, mute);
-
-      this.nodes.set(sourceId, { sourceNode, gainNode, analyserNode });
-      console.log(`[AudioMixer] Connected screenshare audio source: ${sourceId}`);
+      const nodeGroup = this.createSourceChain(sourceNode, sourceId);
+      this.nodes.set(sourceId, nodeGroup);
+      console.log(`[AudioMixer] Connected screenshare audio source with DSP: ${sourceId}`);
     } catch (err) {
       console.error('[AudioMixer] Error connecting screenshare audio:', err);
     }
@@ -120,30 +170,16 @@ export class AudioMixer {
     this.disconnectSource(sourceId);
 
     try {
-      // Create element source (handles cross-origin requirements if needed)
       videoElement.crossOrigin = 'anonymous';
       
       const sourceNode = this.ctx.createMediaElementSource(videoElement);
-      const gainNode = this.ctx.createGain();
-      const analyserNode = this.ctx.createAnalyser();
-      analyserNode.fftSize = 256;
-
-      sourceNode.connect(gainNode);
-      gainNode.connect(analyserNode);
-      analyserNode.connect(this.dest);
+      const nodeGroup = this.createSourceChain(sourceNode, sourceId);
       
-      // Also connect to speaker output so the local user can hear the video audio!
-      gainNode.connect(this.ctx.destination);
+      // Connect final volume slider to local audio output speakers so broadcaster can hear it too
+      nodeGroup.gainNode.connect(this.ctx.destination);
 
-      const vol = this.volumes.has(sourceId) ? this.volumes.get(sourceId)! : 0.8;
-      const mute = this.mutes.has(sourceId) ? this.mutes.get(sourceId)! : false;
-
-      gainNode.gain.setValueAtTime(mute ? 0 : vol, this.ctx.currentTime);
-      this.volumes.set(sourceId, vol);
-      this.mutes.set(sourceId, mute);
-
-      this.nodes.set(sourceId, { sourceNode, gainNode, analyserNode });
-      console.log(`[AudioMixer] Connected media element audio source: ${sourceId}`);
+      this.nodes.set(sourceId, nodeGroup);
+      console.log(`[AudioMixer] Connected media element audio source with DSP: ${sourceId}`);
     } catch (err) {
       console.error('[AudioMixer] Error connecting media element audio:', err);
     }
@@ -155,10 +191,12 @@ export class AudioMixer {
 
     try {
       group.sourceNode.disconnect();
+      group.gateNode.disconnect();
+      group.compressorNode.disconnect();
       group.gainNode.disconnect();
       group.analyserNode.disconnect();
     } catch (e) {
-      // Node might already be disconnected
+      // Nodes already disconnected
     }
 
     this.nodes.delete(sourceId);
@@ -191,7 +229,7 @@ export class AudioMixer {
     return this.mutes.get(sourceId) ?? false;
   }
 
-  // Get real-time volume level from 0 to 100 for decibel meter
+  // Get real-time volume level from 0 to 100 with dynamic software Noise Gate processing
   getAudioLevel(sourceId: string): number {
     const group = this.nodes.get(sourceId);
     if (!group) return 0;
@@ -209,10 +247,25 @@ export class AudioMixer {
       }
     }
 
-    // Convert deviation ratio (0..128) to standard peak ratio (0..100)
-    // Add a logarithmic scale or soft multiplier for responsive visual bounce
     const ratio = maxVal / 128.0;
-    const value = Math.min(Math.round(ratio * 150), 100); // amplify slightly for better UI visibility
+
+    // Real-Time DSP Noise Gate implementation
+    const gateEnabled = this.gateEnabledStates.get(sourceId) ?? false;
+    if (gateEnabled && this.ctx) {
+      const threshold = 0.015; // Gate threshold level (approx -36dB vocal activation limit)
+      if (ratio < threshold) {
+        // Dynamic gating: ramp down immediately
+        group.gateNode.gain.setValueAtTime(0, this.ctx.currentTime);
+      } else {
+        // Vocal activation: open gate immediately
+        group.gateNode.gain.setValueAtTime(1.0, this.ctx.currentTime);
+      }
+    } else if (this.ctx) {
+      // Pass-through
+      group.gateNode.gain.setValueAtTime(1.0, this.ctx.currentTime);
+    }
+
+    const value = Math.min(Math.round(ratio * 150), 100); // Visual amplification factor
     return value;
   }
 }
