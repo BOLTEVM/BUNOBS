@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>BOBS Studio — Live Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ───────────────────────── Reset & Base ───────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-deep: #080B14;
+      --bg-mid: #0B0F19;
+      --accent: #6366F1;
+      --accent-bright: #818CF8;
+      --purple: #8B5CF6;
+      --glass-bg: rgba(15, 23, 42, 0.6);
+      --glass-border: rgba(99, 102, 241, 0.15);
+      --glass-border-hover: rgba(99, 102, 241, 0.35);
+      --text-primary: #E2E8F0;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      --live-red: #EF4444;
+      --success: #10B981;
+      --danger: #F43F5E;
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    html { font-size: 16px; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100dvh;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1, h2, h3, h4 { font-family: 'Outfit', sans-serif; }
+
+    /* ───────────────────── Animated Background ───────────────────── */
+    .bg-animation {
+      position: fixed; inset: 0; z-index: 0; overflow: hidden;
+      background: var(--bg-deep);
+    }
+    .bg-animation::before,
+    .bg-animation::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.35;
+      animation: drift 20s ease-in-out infinite alternate;
+    }
+    .bg-animation::before {
+      width: 60vmax; height: 60vmax;
+      background: radial-gradient(circle, #6366F1 0%, transparent 70%);
+      top: -20%; left: -15%;
+      animation-duration: 22s;
+    }
+    .bg-animation::after {
+      width: 55vmax; height: 55vmax;
+      background: radial-gradient(circle, #8B5CF6 0%, transparent 70%);
+      bottom: -25%; right: -15%;
+      animation-duration: 18s;
+      animation-delay: -8s;
+    }
+    .bg-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(100px);
+      opacity: 0.18;
+      width: 40vmax; height: 40vmax;
+      background: radial-gradient(circle, #4F46E5 0%, transparent 70%);
+      top: 40%; left: 50%; transform: translate(-50%, -50%);
+      animation: drift 25s ease-in-out infinite alternate-reverse;
+    }
+
+    @keyframes drift {
+      0%   { transform: translate(0, 0) scale(1); }
+      33%  { transform: translate(6%, -8%) scale(1.08); }
+      66%  { transform: translate(-4%, 5%) scale(0.95); }
+      100% { transform: translate(3%, 3%) scale(1.03); }
+    }
+
+    /* ─────────────────────── Main Container ─────────────────────── */
+    .app {
+      position: relative; z-index: 1;
+      width: 100%;
+      max-width: 1100px;
+      padding: 20px 16px 40px;
+      display: flex; flex-direction: column; align-items: center;
+      min-height: 100dvh;
+    }
+
+    /* ────────────────────────── Logo ────────────────────────── */
+    .logo-wrap {
+      margin: 8px 0 20px;
+      display: flex; align-items: center; justify-content: center;
+      gap: 12px;
+      animation: fadeSlideIn 0.8s ease-out both;
+    }
+    .logo-wrap img {
+      height: 44px; width: auto;
+      filter: drop-shadow(0 0 18px rgba(99,102,241,0.4));
+      transition: filter 0.3s;
+    }
+    .logo-wrap img:hover {
+      filter: drop-shadow(0 0 28px rgba(99,102,241,0.65));
+    }
+    .logo-text {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700; font-size: 1.15rem;
+      background: linear-gradient(135deg, var(--accent-bright), var(--purple));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 0.5px;
+    }
+
+    /* ─────────────────────── Glass Card ─────────────────────── */
+    .viewer-card {
+      width: 100%;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(24px) saturate(1.3);
+      -webkit-backdrop-filter: blur(24px) saturate(1.3);
+      box-shadow:
+        0 8px 32px rgba(0,0,0,0.45),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+      overflow: hidden;
+      animation: fadeSlideIn 0.9s ease-out 0.1s both;
+      transition: border-color 0.4s, box-shadow 0.4s;
+    }
+    .viewer-card:hover {
+      border-color: var(--glass-border-hover);
+      box-shadow:
+        0 12px 48px rgba(0,0,0,0.5),
+        0 0 0 1px rgba(99,102,241,0.08),
+        inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .viewer-card.is-live {
+      border-color: rgba(239, 68, 68, 0.25);
+      box-shadow:
+        0 8px 32px rgba(0,0,0,0.45),
+        0 0 60px -20px rgba(239,68,68,0.15),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    /* ──────────────────── Video Container ──────────────────── */
+    .video-container {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      overflow: hidden;
+    }
+    .video-container video {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block;
+      background: #000;
+    }
+
+    /* ──────────────── Overlay States ──────────────── */
+    .overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: rgba(8, 11, 20, 0.88);
+      backdrop-filter: blur(6px);
+      transition: opacity 0.5s ease, visibility 0.5s;
+      z-index: 5;
+    }
+    .overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+    .overlay-icon {
+      width: 56px; height: 56px; margin-bottom: 18px;
+      color: var(--accent);
+      animation: pulse-soft 2s ease-in-out infinite;
+    }
+    .overlay h3 {
+      font-size: 1.25rem; font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .overlay p {
+      font-size: 0.875rem; color: var(--text-secondary);
+    }
+    .overlay .btn-retry {
+      margin-top: 16px;
+      padding: 10px 28px;
+      border-radius: 999px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.875rem; font-weight: 500;
+      cursor: pointer;
+      transition: all 0.25s;
+      backdrop-filter: blur(12px);
+    }
+    .overlay .btn-retry:hover {
+      background: rgba(99,102,241,0.15);
+      border-color: var(--accent);
+      box-shadow: 0 0 20px rgba(99,102,241,0.15);
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 52px; height: 52px; margin-bottom: 20px;
+      border: 3px solid rgba(99,102,241,0.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ──────────────── Controls Bar ──────────────── */
+    .controls-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      background: rgba(8,11,20,0.35);
+      flex-wrap: wrap;
+    }
+
+    /* Volume */
+    .volume-group {
+      display: flex; align-items: center; gap: 6px;
+      margin-right: auto;
+    }
+    .btn-icon {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; border-radius: var(--radius-sm);
+      background: transparent; color: var(--text-secondary);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn-icon:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+    .btn-icon svg { width: 20px; height: 20px; }
+
+    /* Range slider (volume) */
+    .vol-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 80px; height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 99px; outline: none;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .vol-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent-bright);
+      box-shadow: 0 0 8px rgba(99,102,241,0.5);
+      border: none; cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.2s;
+    }
+    .vol-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 14px rgba(99,102,241,0.65);
+    }
+    .vol-slider::-moz-range-thumb {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent-bright);
+      box-shadow: 0 0 8px rgba(99,102,241,0.5);
+      border: none; cursor: pointer;
+    }
+
+    .btn-fullscreen { margin-left: 4px; }
+
+    /* ──────────────── Status Bar ──────────────── */
+    .status-bar {
+      display: flex; align-items: center; gap: 14px;
+      padding: 12px 16px;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      font-size: 0.8rem; font-weight: 500;
+      color: var(--text-secondary);
+      flex-wrap: wrap;
+      row-gap: 8px;
+      background: rgba(8,11,20,0.25);
+    }
+
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 4px 12px 4px 9px;
+      border-radius: 999px;
+      font-weight: 700; font-size: 0.72rem;
+      text-transform: uppercase; letter-spacing: 1px;
+      transition: all 0.4s;
+    }
+    .live-badge.is-live {
+      background: rgba(239,68,68,0.15);
+      color: var(--live-red);
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+    .live-badge.is-offline {
+      background: rgba(100,116,139,0.12);
+      color: var(--text-muted);
+      border: 1px solid rgba(100,116,139,0.15);
+    }
+
+    .live-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--live-red);
+      flex-shrink: 0;
+    }
+    .live-badge.is-live .live-dot {
+      animation: pulse-dot 1.5s ease-in-out infinite;
+      box-shadow: 0 0 6px rgba(239,68,68,0.6);
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.45; transform: scale(0.75); }
+    }
+
+    .stat {
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .stat svg { width: 15px; height: 15px; opacity: 0.7; }
+
+    .quality-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      transition: background 0.4s;
+    }
+    .quality-dot.good   { background: var(--success); box-shadow: 0 0 6px rgba(16,185,129,0.5); }
+    .quality-dot.fair   { background: #F59E0B; box-shadow: 0 0 6px rgba(245,158,11,0.5); }
+    .quality-dot.poor   { background: var(--danger); box-shadow: 0 0 6px rgba(244,63,94,0.5); }
+
+    .sep {
+      width: 1px; height: 16px;
+      background: rgba(255,255,255,0.08);
+    }
+
+    /* push right on desktop */
+    .status-right {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 14px;
+    }
+
+    /* ──────────────── Animations ──────────────── */
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 0.85; transform: scale(1); }
+      50%      { opacity: 1; transform: scale(1.06); }
+    }
+
+    /* ──────────────── Footer ──────────────── */
+    .footer {
+      margin-top: 24px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      animation: fadeSlideIn 1s ease-out 0.3s both;
+    }
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .footer a:hover { color: var(--accent-bright); }
+
+    /* ──────────────── Responsive ──────────────── */
+    @media (max-width: 640px) {
+      .app { padding: 12px 8px 28px; }
+      .logo-wrap img { height: 34px; }
+      .logo-text { font-size: 1rem; }
+      .controls-bar { padding: 8px 10px; gap: 6px; }
+      .vol-slider { width: 56px; }
+      .status-bar { padding: 10px 12px; gap: 10px; font-size: 0.72rem; }
+      .status-right { margin-left: 0; }
+      .sep { display: none; }
+    }
+    @media (max-width: 380px) {
+      .logo-text { display: none; }
+    }
+
+    /* ───── Fullscreen tweaks ───── */
+    .viewer-card:fullscreen,
+    .viewer-card:-webkit-full-screen {
+      border-radius: 0; border: none;
+      background: #000;
+    }
+    .viewer-card:fullscreen .video-container,
+    .viewer-card:-webkit-full-screen .video-container {
+      aspect-ratio: unset; height: calc(100vh - 90px);
+    }
+
+    /* ───── Toast / Notifications ───── */
+    .toast-container {
+      position: fixed; top: 16px; right: 16px; z-index: 100;
+      display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 10px 18px;
+      border-radius: var(--radius-sm);
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(16px);
+      font-size: 0.82rem; font-weight: 500;
+      color: var(--text-primary);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      animation: toastIn 0.35s ease-out both;
+      pointer-events: auto;
+    }
+    .toast.fade-out { animation: toastOut 0.3s ease-in forwards; }
+    @keyframes toastIn  { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes toastOut { to   { opacity: 0; transform: translateX(30px); } }
+  </style>
+</head>
+<body>
+  <!-- Animated background -->
+  <div class="bg-animation"><div class="bg-orb"></div></div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toasts"></div>
+
+  <div class="app">
+    <!-- Logo -->
+    <div class="logo-wrap">
+      <img src="/0logov3.png" alt="BOBS Studio" />
+      <span class="logo-text">BOBS Studio</span>
+    </div>
+
+    <!-- Viewer Card -->
+    <div class="viewer-card" id="viewerCard">
+      <div class="video-container" id="videoContainer">
+        <video id="videoEl" autoplay playsinline></video>
+
+        <!-- Connecting Overlay -->
+        <div class="overlay" id="overlayConnecting">
+          <div class="spinner"></div>
+          <h3>Connecting…</h3>
+          <p>Establishing connection to BOBS Studio</p>
+        </div>
+
+        <!-- Waiting Overlay -->
+        <div class="overlay hidden" id="overlayWaiting">
+          <svg class="overlay-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <h3>Waiting for Broadcast</h3>
+          <p>The stream will appear here when the host goes live</p>
+        </div>
+
+        <!-- Ended Overlay -->
+        <div class="overlay hidden" id="overlayEnded">
+          <svg class="overlay-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+          </svg>
+          <h3>Broadcast Ended</h3>
+          <p>The host has stopped streaming</p>
+          <button class="btn-retry" onclick="resetAndConnect()">Reconnect</button>
+        </div>
+
+        <!-- Error Overlay -->
+        <div class="overlay hidden" id="overlayError">
+          <svg class="overlay-icon" style="color:var(--danger)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+          <h3 id="errorTitle">Connection Lost</h3>
+          <p id="errorMsg">Attempting to reconnect…</p>
+          <button class="btn-retry" onclick="resetAndConnect()">Retry Now</button>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls-bar">
+        <div class="volume-group">
+          <!-- Mute button -->
+          <button class="btn-icon" id="btnMute" title="Toggle mute" aria-label="Toggle mute">
+            <svg id="iconVolume" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+            <svg id="iconMuted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+            </svg>
+          </button>
+          <input type="range" class="vol-slider" id="volSlider" min="0" max="1" step="0.01" value="0.8" />
+        </div>
+
+        <!-- Fullscreen -->
+        <button class="btn-icon btn-fullscreen" id="btnFullscreen" title="Fullscreen" aria-label="Toggle fullscreen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+            <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span class="live-badge is-offline" id="liveBadge">
+          <span class="live-dot"></span>
+          <span id="liveBadgeText">Offline</span>
+        </span>
+
+        <span class="sep"></span>
+
+        <span class="stat" id="statViewers" title="Viewers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span id="viewerCount">0</span>
+        </span>
+
+        <span class="sep"></span>
+
+        <span class="stat" id="statUptime" title="Uptime">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span id="uptimeText">--:--</span>
+        </span>
+
+        <div class="status-right">
+          <span class="stat" id="statRes" title="Resolution">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+            <span id="resText">—</span>
+          </span>
+
+          <span class="sep"></span>
+
+          <span class="stat" title="Connection quality">
+            <span class="quality-dot good" id="qualityDot"></span>
+            <span id="qualityLabel">Good</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">Powered by <a href="#">BOBS Studio</a></div>
+  </div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   BOBS Studio — Live Viewer
+   Self-contained MediaSource + WebSocket viewer
+   ═══════════════════════════════════════════════════════════════════ */
+(() => {
+  'use strict';
+
+  // ─── DOM refs ───
+  const video         = document.getElementById('videoEl');
+  const viewerCard    = document.getElementById('viewerCard');
+  const videoContainer= document.getElementById('videoContainer');
+  const overlays      = {
+    connecting: document.getElementById('overlayConnecting'),
+    waiting:    document.getElementById('overlayWaiting'),
+    ended:      document.getElementById('overlayEnded'),
+    error:      document.getElementById('overlayError'),
+  };
+  const liveBadge     = document.getElementById('liveBadge');
+  const liveBadgeText = document.getElementById('liveBadgeText');
+  const viewerCount   = document.getElementById('viewerCount');
+  const uptimeText    = document.getElementById('uptimeText');
+  const resText       = document.getElementById('resText');
+  const qualityDot    = document.getElementById('qualityDot');
+  const qualityLabel  = document.getElementById('qualityLabel');
+  const btnMute       = document.getElementById('btnMute');
+  const iconVolume    = document.getElementById('iconVolume');
+  const iconMuted     = document.getElementById('iconMuted');
+  const volSlider     = document.getElementById('volSlider');
+  const btnFullscreen = document.getElementById('btnFullscreen');
+  const errorTitle    = document.getElementById('errorTitle');
+  const errorMsg      = document.getElementById('errorMsg');
+
+  // ─── State ───
+  let ws = null;
+  let mediaSource = null;
+  let sourceBuffer = null;
+  let mimeType = '';
+  let queue = [];              // chunks waiting while sourceBuffer is updating
+  let initReceived = false;
+  let isLive = false;
+  let reconnectAttempts = 0;
+  const MAX_RECONNECT = 12;
+  let reconnectTimer = null;
+  let uptimeInterval = null;
+  let streamStartedAt = null;
+  let lastChunkTime = 0;       // for connection quality tracking
+  let appendErrorCount = 0;
+
+  // ─── Helpers ───
+  function showOverlay(name) {
+    Object.entries(overlays).forEach(([k, el]) => {
+      el.classList.toggle('hidden', k !== name);
+    });
+  }
+  function hideAllOverlays() {
+    Object.values(overlays).forEach(el => el.classList.add('hidden'));
+  }
+
+  function setLive(live) {
+    isLive = live;
+    liveBadge.classList.toggle('is-live', live);
+    liveBadge.classList.toggle('is-offline', !live);
+    liveBadgeText.textContent = live ? 'Live' : 'Offline';
+    viewerCard.classList.toggle('is-live', live);
+  }
+
+  function formatUptime(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const pad = n => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }
+
+  function updateUptime() {
+    if (!streamStartedAt) return;
+    uptimeText.textContent = formatUptime(Date.now() - streamStartedAt);
+  }
+
+  function toast(msg, duration = 3500) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(() => { el.classList.add('fade-out'); setTimeout(() => el.remove(), 350); }, duration);
+  }
+
+  // ─── Volume / Mute ───
+  function syncVolumeUI() {
+    const muted = video.muted || video.volume === 0;
+    iconVolume.style.display = muted ? 'none' : '';
+    iconMuted.style.display  = muted ? '' : 'none';
+    volSlider.value = video.muted ? 0 : video.volume;
+  }
+  btnMute.addEventListener('click', () => {
+    video.muted = !video.muted;
+    syncVolumeUI();
+  });
+  volSlider.addEventListener('input', () => {
+    video.volume = Number(volSlider.value);
+    video.muted = video.volume === 0;
+    syncVolumeUI();
+  });
+  video.volume = 0.8;
+  syncVolumeUI();
+
+  // ─── Fullscreen ───
+  btnFullscreen.addEventListener('click', () => {
+    const el = viewerCard;
+    if (!document.fullscreenElement) {
+      (el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen).call(el);
+    } else {
+      (document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen).call(document);
+    }
+  });
+
+  // ─── Connection Quality ───
+  function updateQuality() {
+    if (!isLive) { setQuality('good'); return; }
+    const elapsed = Date.now() - lastChunkTime;
+    if (elapsed < 2000)      setQuality('good');
+    else if (elapsed < 5000) setQuality('fair');
+    else                     setQuality('poor');
+  }
+  function setQuality(level) {
+    qualityDot.className = 'quality-dot ' + level;
+    qualityLabel.textContent = level.charAt(0).toUpperCase() + level.slice(1);
+  }
+  setInterval(updateQuality, 2000);
+
+  // ─── MediaSource helpers ───
+  function cleanupMediaSource() {
+    if (sourceBuffer) {
+      try { sourceBuffer.abort(); } catch(_) {}
+      sourceBuffer = null;
+    }
+    if (mediaSource) {
+      try {
+        if (mediaSource.readyState === 'open') mediaSource.endOfStream();
+      } catch(_) {}
+      mediaSource = null;
+    }
+    video.removeAttribute('src');
+    video.load();
+    queue = [];
+    initReceived = false;
+    appendErrorCount = 0;
+  }
+
+  function initMediaSource(mime) {
+    cleanupMediaSource();
+    mimeType = mime;
+
+    mediaSource = new MediaSource();
+    video.src = URL.createObjectURL(mediaSource);
+
+    mediaSource.addEventListener('sourceopen', () => {
+      try {
+        sourceBuffer = mediaSource.addSourceBuffer(mimeType);
+        sourceBuffer.mode = 'segments';
+        sourceBuffer.addEventListener('updateend', drainQueue);
+        sourceBuffer.addEventListener('error', (e) => {
+          console.error('SourceBuffer error', e);
+          appendErrorCount++;
+          if (appendErrorCount > 10) {
+            toast('Playback error — reconnecting…');
+            resetAndConnect();
+          }
+        });
+        // Drain anything that arrived before sourceopen fired
+        drainQueue();
+      } catch (e) {
+        console.error('Failed to create SourceBuffer:', e);
+        showError('Playback Error', 'Your browser may not support this codec: ' + mimeType);
+      }
+    });
+  }
+
+  function appendChunk(data) {
+    queue.push(data);
+    drainQueue();
+  }
+
+  function drainQueue() {
+    if (!sourceBuffer || sourceBuffer.updating || queue.length === 0) return;
+
+    // Remove old buffered data to keep memory in check and latency low
+    try {
+      if (sourceBuffer.buffered.length > 0) {
+        const currentTime = video.currentTime;
+        const bufferedEnd = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
+        const bufferedStart = sourceBuffer.buffered.start(0);
+
+        // If we have more than 30s buffered behind playhead, trim
+        if (currentTime - bufferedStart > 30) {
+          sourceBuffer.remove(bufferedStart, currentTime - 5);
+          return; // updateend will call drainQueue again
+        }
+
+        // Keep latency low: if we're more than 3s behind live edge, seek forward
+        if (bufferedEnd - currentTime > 3) {
+          video.currentTime = bufferedEnd - 0.5;
+        }
+      }
+    } catch (_) {}
+
+    const chunk = queue.shift();
+    try {
+      sourceBuffer.appendBuffer(chunk);
+      appendErrorCount = 0;
+    } catch (e) {
+      if (e.name === 'QuotaExceededError') {
+        // Aggressively remove old data
+        try {
+          const start = sourceBuffer.buffered.start(0);
+          const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
+          sourceBuffer.remove(start, end - 10);
+        } catch (_) {}
+        // Re-queue the chunk
+        queue.unshift(chunk);
+      } else {
+        console.error('appendBuffer error:', e);
+        appendErrorCount++;
+      }
+    }
+  }
+
+  // ─── Latency Keeper ───
+  // Periodically nudge playback to near-live
+  setInterval(() => {
+    if (!isLive || !sourceBuffer || !sourceBuffer.buffered.length) return;
+    try {
+      const end = sourceBuffer.buffered.end(sourceBuffer.buffered.length - 1);
+      if (end - video.currentTime > 4) {
+        video.currentTime = end - 0.5;
+      }
+    } catch(_) {}
+  }, 5000);
+
+  // ─── WebSocket ───
+  function connect() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+    showOverlay('connecting');
+    setLive(false);
+
+    const url = `ws://${location.hostname}:3001/ws/view`;
+    ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+
+    ws.addEventListener('open', () => {
+      reconnectAttempts = 0;
+      toast('Connected to server');
+      showOverlay('waiting');
+    });
+
+    ws.addEventListener('message', (event) => {
+      if (typeof event.data === 'string') {
+        handleJSON(event.data);
+      } else {
+        handleBinary(event.data);
+      }
+    });
+
+    ws.addEventListener('close', (e) => {
+      console.log('WS closed', e.code, e.reason);
+      if (!isLive) {
+        // If we weren't live, just show waiting after reconnect
+      }
+      scheduleReconnect();
+    });
+
+    ws.addEventListener('error', (e) => {
+      console.error('WS error', e);
+    });
+  }
+
+  function handleJSON(raw) {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    switch (msg.type) {
+      case 'viewer-init': {
+        const mime = msg.mimeType || msg.data?.mimeType || 'video/webm; codecs="vp8, opus"';
+        const resolution = msg.resolution || msg.data?.resolution;
+        const fps = msg.fps || msg.data?.fps;
+        const started = msg.streamStartedAt || msg.data?.streamStartedAt;
+
+        initMediaSource(mime);
+        initReceived = false; // waiting for first binary (init segment)
+
+        if (started) {
+          streamStartedAt = new Date(started).getTime();
+          clearInterval(uptimeInterval);
+          uptimeInterval = setInterval(updateUptime, 1000);
+          updateUptime();
+        }
+        if (resolution) resText.textContent = resolution;
+
+        setLive(true);
+        hideAllOverlays();
+        toast('🔴 Broadcast started');
+        break;
+      }
+
+      case 'viewer-status': {
+        const d = msg.data || msg;
+        if (d.viewerCount != null) viewerCount.textContent = d.viewerCount;
+        if (d.resolution)          resText.textContent = d.resolution;
+        if (d.uptime)              uptimeText.textContent = formatUptime(d.uptime);
+        if (d.isLive != null)      setLive(d.isLive);
+        break;
+      }
+
+      case 'viewer-stopped': {
+        setLive(false);
+        cleanupMediaSource();
+        clearInterval(uptimeInterval);
+        streamStartedAt = null;
+        showOverlay('ended');
+        toast('Broadcast ended');
+        break;
+      }
+
+      default:
+        console.log('Unknown message type:', msg.type, msg);
+    }
+  }
+
+  function handleBinary(data) {
+    lastChunkTime = Date.now();
+
+    if (!initReceived) {
+      initReceived = true;
+      // This is the init segment — must be appended first
+    }
+
+    appendChunk(new Uint8Array(data));
+
+    // Try to start playback
+    if (video.paused) {
+      video.play().catch(() => {
+        // Autoplay blocked — user will need to interact
+      });
+    }
+  }
+
+  // ─── Reconnect with backoff ───
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    if (reconnectAttempts >= MAX_RECONNECT) {
+      showError('Connection Failed', 'Unable to connect after multiple attempts.');
+      return;
+    }
+
+    const delay = Math.min(1000 * Math.pow(1.8, reconnectAttempts), 30000);
+    reconnectAttempts++;
+    console.log(`Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempts})`);
+
+    if (!isLive) {
+      showOverlay('connecting');
+    }
+
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  }
+
+  function showError(title, msg) {
+    errorTitle.textContent = title;
+    errorMsg.textContent = msg;
+    showOverlay('error');
+  }
+
+  // ─── Public reset ───
+  window.resetAndConnect = function() {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    reconnectAttempts = 0;
+    if (ws) { try { ws.close(); } catch(_) {} ws = null; }
+    cleanupMediaSource();
+    clearInterval(uptimeInterval);
+    streamStartedAt = null;
+    setLive(false);
+    connect();
+  };
+
+  // ─── Keyboard shortcuts ───
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'f' || e.key === 'F') btnFullscreen.click();
+    if (e.key === 'm' || e.key === 'M') btnMute.click();
+  });
+
+  // ─── Start ───
+  connect();
+})();
+</script>
+</body>
+</html>

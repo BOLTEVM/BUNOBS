@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Tv, Camera, Image as ImageIcon, Type, Palette, Video as VideoIcon,
-  Play, Square, Volume2, VolumeX, Eye, EyeOff, Plus, Trash2,
-  Layers, Sliders, Settings, Radio, Info, Maximize2, Monitor, Gamepad2, Download, Upload
+  Play, Square, Volume2, VolumeX, Eye, EyeOff, Plus,
+  Layers, Sliders, Settings, Radio, Maximize2, Monitor, Gamepad2, Download, Upload,
+  Wifi, Disc, ChevronUp, ChevronDown, ArrowUpDown, ScreenShare,
+  Minus
 } from 'lucide-react';
 import type { Scene, Source, ServerStatus, StreamConfig, SourceType } from 'shared';
 import { compositor } from './utils/Compositor';
@@ -144,6 +146,568 @@ const INITIAL_SCENES: Scene[] = [
   }
 ];
 
+// Inject global styles for animations, scrollbar, and component classes
+const injectGlobalStyles = () => {
+  if (document.getElementById('bobs-global-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'bobs-global-styles';
+  style.textContent = `
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+    .mono { font-family: 'JetBrains Mono', monospace !important; }
+
+    @keyframes logoGlow {
+      0%, 100% { filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5)); }
+      50% { filter: drop-shadow(0 0 16px rgba(99, 102, 241, 0.8)); }
+    }
+
+    @keyframes pulseRed {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      50% { box-shadow: 0 0 12px 4px rgba(239, 68, 68, 0.3); }
+    }
+
+    @keyframes pulseGreen {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+      50% { box-shadow: 0 0 12px 4px rgba(16, 185, 129, 0.3); }
+    }
+
+    @keyframes pulsePurple {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
+      50% { box-shadow: 0 0 12px 4px rgba(139, 92, 246, 0.3); }
+    }
+
+    @keyframes liveDot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    @keyframes programBorderGlow {
+      0%, 100% { border-color: rgba(239, 68, 68, 0.5); box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.05); }
+      50% { border-color: rgba(239, 68, 68, 0.8); box-shadow: inset 0 0 30px rgba(239, 68, 68, 0.1); }
+    }
+
+    .header-logo {
+      height: 30px;
+      animation: logoGlow 3s ease-in-out infinite;
+      transition: transform 0.2s ease, filter 0.2s ease;
+    }
+    .header-logo:hover {
+      transform: scale(1.1);
+      filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.9)) !important;
+    }
+
+    .stat-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(51, 65, 85, 0.5);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      transition: border-color 0.2s ease;
+    }
+    .stat-pill:hover { border-color: rgba(99, 102, 241, 0.4); }
+    .stat-pill .stat-label {
+      color: #64748B;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .stat-pill .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #E2E8F0;
+    }
+
+    .conn-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .conn-dot.connected { background: #10B981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.5); }
+    .conn-dot.disconnected { background: #F59E0B; box-shadow: 0 0 6px rgba(245, 158, 11, 0.5); }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #EF4444;
+      animation: liveDot 1s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    .rec-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10B981;
+      animation: liveDot 1s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    .canvas-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      z-index: 10;
+      pointer-events: none;
+      text-transform: uppercase;
+    }
+    .canvas-badge.preview {
+      background: rgba(99, 102, 241, 0.2);
+      color: #A5B4FC;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+    }
+    .canvas-badge.program {
+      background: rgba(239, 68, 68, 0.2);
+      color: #FCA5A5;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    .canvas-res-info {
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: #475569;
+      padding: 4px 0 0 0;
+    }
+
+    .program-canvas-live {
+      animation: programBorderGlow 2s ease-in-out infinite;
+      border: 2px solid rgba(239, 68, 68, 0.5) !important;
+    }
+
+    .panel-section {
+      display: flex;
+      flex-direction: column;
+      background: #0F1524;
+      border: 1px solid rgba(51, 65, 85, 0.4);
+      border-radius: 6px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: rgba(15, 23, 42, 0.8);
+      border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+      flex-shrink: 0;
+    }
+    .panel-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #94A3B8;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px;
+    }
+    .panel-toolbar {
+      display: flex;
+      align-items: center;
+      border-top: 1px solid rgba(51, 65, 85, 0.4);
+      background: rgba(15, 23, 42, 0.5);
+      flex-shrink: 0;
+    }
+    .panel-toolbar-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px 0;
+      background: transparent;
+      border: none;
+      border-right: 1px solid rgba(51, 65, 85, 0.3);
+      color: #64748B;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .panel-toolbar-btn:last-child { border-right: none; }
+    .panel-toolbar-btn:hover { background: rgba(99, 102, 241, 0.1); color: #A5B4FC; }
+    .panel-toolbar-btn:active { background: rgba(99, 102, 241, 0.2); }
+
+    .scene-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      color: #CBD5E1;
+      border-left: 3px solid transparent;
+      transition: background 0.12s ease, border-color 0.12s ease;
+      user-select: none;
+    }
+    .scene-item:hover { background: rgba(99, 102, 241, 0.06); }
+    .scene-item.active {
+      background: rgba(99, 102, 241, 0.1);
+      border-left-color: #6366F1;
+      color: #E2E8F0;
+    }
+    .scene-item .live-tag {
+      background: rgba(239, 68, 68, 0.15);
+      color: #FCA5A5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .scene-rename-input {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #6366F1;
+      color: #E2E8F0;
+      font-size: 0.78rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+      outline: none;
+      width: 100%;
+      font-family: inherit;
+    }
+
+    .source-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      color: #CBD5E1;
+      border-radius: 3px;
+      transition: background 0.12s ease;
+      user-select: none;
+      gap: 4px;
+    }
+    .source-item:hover { background: rgba(99, 102, 241, 0.06); }
+    .source-item.active { background: rgba(99, 102, 241, 0.12); }
+    .source-item .source-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+    .source-item .source-info span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .source-item .source-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .src-action-btn {
+      background: transparent;
+      border: none;
+      padding: 3px;
+      cursor: pointer;
+      color: #64748B;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+    .src-action-btn:hover { background: rgba(99, 102, 241, 0.15); color: #A5B4FC; }
+
+    /* Audio Mixer */
+    .mixer-strip {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid rgba(51, 65, 85, 0.4);
+      border-radius: 5px;
+      padding: 6px 4px;
+      min-width: 72px;
+      flex-shrink: 0;
+    }
+    .mixer-strip-name {
+      font-size: 0.6rem;
+      color: #94A3B8;
+      font-weight: 600;
+      text-align: center;
+      width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mixer-meters {
+      display: flex;
+      gap: 2px;
+      height: 80px;
+    }
+    .mixer-meter-track {
+      width: 6px;
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 2px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column-reverse;
+      border: 1px solid rgba(51, 65, 85, 0.3);
+    }
+    .mixer-meter-fill {
+      width: 100%;
+      transition: height 0.08s linear;
+      border-radius: 1px;
+    }
+    .mixer-meter-fill.left {
+      background: linear-gradient(to top, #10B981, #34D399 60%, #FBBF24 85%, #EF4444 100%);
+    }
+    .mixer-meter-fill.right {
+      background: linear-gradient(to top, #10B981, #34D399 60%, #FBBF24 85%, #EF4444 100%);
+    }
+    .mixer-db-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.55rem;
+      color: #475569;
+      text-align: center;
+    }
+    .mixer-fader {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      padding: 0 2px;
+    }
+    .mixer-fader input[type="range"] {
+      width: 100%;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(51, 65, 85, 0.5);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    .mixer-fader input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 10px;
+      height: 14px;
+      background: #CBD5E1;
+      border-radius: 2px;
+      border: 1px solid #64748B;
+      cursor: pointer;
+    }
+    .mixer-mute-btn {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(51, 65, 85, 0.4);
+      padding: 3px 5px;
+      border-radius: 3px;
+      color: #94A3B8;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.12s ease;
+    }
+    .mixer-mute-btn:hover { background: rgba(51, 65, 85, 0.5); }
+    .mixer-mute-btn.muted {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #EF4444;
+    }
+
+    /* Control Board */
+    .ctrl-btn {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid rgba(51, 65, 85, 0.5);
+      background: rgba(30, 41, 59, 0.4);
+      color: #CBD5E1;
+    }
+    .ctrl-btn:hover { background: rgba(51, 65, 85, 0.5); border-color: rgba(99, 102, 241, 0.3); }
+    .ctrl-btn:active { transform: scale(0.98); }
+    .ctrl-btn.streaming-active {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #FCA5A5;
+      animation: pulseRed 2s ease-in-out infinite;
+    }
+    .ctrl-btn.recording-active {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #6EE7B7;
+      animation: pulseGreen 2s ease-in-out infinite;
+    }
+    .ctrl-btn.vcam-active {
+      background: rgba(139, 92, 246, 0.15);
+      border-color: rgba(139, 92, 246, 0.4);
+      color: #C4B5FD;
+      animation: pulsePurple 2s ease-in-out infinite;
+    }
+    .ctrl-btn.studio-active {
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.4);
+      color: #A5B4FC;
+    }
+    .ctrl-btn.primary-action {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: rgba(99, 102, 241, 0.3);
+      color: #A5B4FC;
+    }
+    .ctrl-btn.primary-action:hover {
+      background: rgba(99, 102, 241, 0.25);
+      border-color: rgba(99, 102, 241, 0.5);
+    }
+
+    /* Transition panel */
+    .transition-select {
+      width: 100%;
+      padding: 5px 8px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(51, 65, 85, 0.4);
+      border-radius: 4px;
+      color: #CBD5E1;
+      font-size: 0.75rem;
+      outline: none;
+      cursor: pointer;
+    }
+    .transition-select:focus { border-color: rgba(99, 102, 241, 0.5); }
+    .transition-duration-input {
+      width: 100%;
+      padding: 5px 8px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(51, 65, 85, 0.4);
+      border-radius: 4px;
+      color: #CBD5E1;
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+      text-align: center;
+    }
+    .transition-duration-input:focus { border-color: rgba(99, 102, 241, 0.5); }
+    .transition-btn {
+      width: 100%;
+      padding: 7px 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      background: rgba(99, 102, 241, 0.12);
+      color: #A5B4FC;
+    }
+    .transition-btn:hover { background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.5); }
+    .transition-btn:active { transform: scale(0.97); }
+    .transition-btn-secondary {
+      width: 100%;
+      padding: 5px 10px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      border: 1px solid rgba(51, 65, 85, 0.4);
+      background: rgba(30, 41, 59, 0.4);
+      color: #94A3B8;
+    }
+    .transition-btn-secondary:hover { background: rgba(51, 65, 85, 0.4); color: #CBD5E1; }
+
+    /* Header buttons */
+    .header-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid rgba(51, 65, 85, 0.5);
+      background: rgba(30, 41, 59, 0.5);
+      color: #94A3B8;
+    }
+    .header-btn:hover { background: rgba(51, 65, 85, 0.5); color: #CBD5E1; border-color: rgba(99, 102, 241, 0.3); }
+    .header-btn:active { transform: scale(0.97); }
+    .header-btn.active { background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.4); color: #A5B4FC; }
+
+    /* Bottom status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 3px 16px;
+      background: #0B0F19;
+      border-top: 1px solid rgba(51, 65, 85, 0.3);
+      font-size: 0.65rem;
+      color: #475569;
+      flex-shrink: 0;
+      gap: 16px;
+      z-index: 10;
+    }
+    .status-bar-left, .status-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .status-bar-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .status-bar-item .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .empty-panel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #334155;
+      font-size: 0.75rem;
+    }
+
+    /* Scrollbar styling */
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-track { background: transparent; }
+    .panel-body::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.4); border-radius: 2px; }
+    .panel-body::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.3); }
+  `;
+  document.head.appendChild(style);
+};
+
 export const App: React.FC = () => {
   // Canvases
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -171,7 +735,10 @@ export const App: React.FC = () => {
     cpuUsage: 1,
     fps: 30,
     activeClients: 0,
-    recordings: []
+    recordings: [],
+    viewerCount: 0,
+    isBroadcasting: false,
+    isVirtualCamActive: false
   });
 
   // Client-side stream settings config
@@ -198,10 +765,20 @@ export const App: React.FC = () => {
   // File input ref for scene collection imports
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-
   // Real-time decibel states for audio visualizer
   const [audioLevels, setAudioLevels] = useState<Record<string, number>>({});
   const [activeMediaSourceIds, setActiveMediaSourceIds] = useState<Set<string>>(new Set());
+
+  // Scene inline rename state
+  const [renamingSceneId, setRenamingSceneId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  // Transition panel states
+  const [transitionType, setTransitionType] = useState<'cut' | 'fade' | 'slide'>('fade');
+  const [transitionDuration, setTransitionDuration] = useState(400);
+
+  // Inject global styles on mount
+  useEffect(() => { injectGlobalStyles(); }, []);
 
   // 1. Establish connection to Bun Backend WebSocket
   useEffect(() => {
@@ -605,6 +1182,27 @@ export const App: React.FC = () => {
     }
   };
 
+  // --- Phase 3: Virtual Camera Controls ---
+  const startVirtualCam = () => {
+    if (!ws || !wsConnected) {
+      alert('WebSocket not connected to Bun backend!');
+      return;
+    }
+    console.log('[VCam] Starting virtual camera loopback...');
+    ws.send(JSON.stringify({ type: 'start-virtual-cam' }));
+    // Also start the media pipeline if not already running
+    startMediaRecorderPipeline();
+  };
+
+  const stopVirtualCam = () => {
+    if (!ws) return;
+    console.log('[VCam] Stopping virtual camera...');
+    ws.send(JSON.stringify({ type: 'stop-virtual-cam' }));
+    if (!serverStatus.isStreaming && !serverStatus.isRecording) {
+      stopMediaRecorderPipeline();
+    }
+  };
+
   // Canvas Program + Web Audio mixed track recording
   const startMediaRecorderPipeline = () => {
     if (mediaRecorderRef.current) return;
@@ -760,58 +1358,210 @@ export const App: React.FC = () => {
     setScenes(updated);
   };
 
+  // --- Scene management helpers ---
+  const handleAddScene = () => {
+    const newId = `scene-${Date.now()}`;
+    const newScene: Scene = {
+      id: newId,
+      name: `Scene ${scenes.length + 1}`,
+      sources: []
+    };
+    setScenes([...scenes, newScene]);
+    setActiveSceneId(newId);
+    compositor.setActiveScene(newId);
+  };
+
+  const handleRemoveScene = () => {
+    if (scenes.length <= 1) return;
+    const remaining = scenes.filter(s => s.id !== activeSceneId);
+    setScenes(remaining);
+    const nextActive = remaining[0].id;
+    setActiveSceneId(nextActive);
+    compositor.setActiveScene(nextActive);
+  };
+
+  const handleRenameScene = (sceneId: string, newName: string) => {
+    if (!newName.trim()) return;
+    setScenes(scenes.map(s => s.id === sceneId ? { ...s, name: newName.trim() } : s));
+    setRenamingSceneId(null);
+  };
+
+  // --- Source reorder helpers ---
+  const moveSourceUp = (sourceId: string) => {
+    setScenes(currentScenes => currentScenes.map(scene => {
+      if (scene.id !== activeSceneId) return scene;
+      const sources = [...scene.sources];
+      const idx = sources.findIndex(s => s.id === sourceId);
+      if (idx < 0) return scene;
+      // Swap zIndex with the source above (higher zIndex)
+      const sorted = sources.slice().sort((a, b) => b.zIndex - a.zIndex);
+      const sortIdx = sorted.findIndex(s => s.id === sourceId);
+      if (sortIdx <= 0) return scene; // already at top
+      const above = sorted[sortIdx - 1];
+      const curZ = sorted[sortIdx].zIndex;
+      const aboveZ = above.zIndex;
+      return {
+        ...scene,
+        sources: sources.map(s => {
+          if (s.id === sourceId) return { ...s, zIndex: aboveZ };
+          if (s.id === above.id) return { ...s, zIndex: curZ };
+          return s;
+        })
+      };
+    }));
+  };
+
+  const moveSourceDown = (sourceId: string) => {
+    setScenes(currentScenes => currentScenes.map(scene => {
+      if (scene.id !== activeSceneId) return scene;
+      const sources = [...scene.sources];
+      const sorted = sources.slice().sort((a, b) => b.zIndex - a.zIndex);
+      const sortIdx = sorted.findIndex(s => s.id === sourceId);
+      if (sortIdx < 0 || sortIdx >= sorted.length - 1) return scene; // already at bottom
+      const below = sorted[sortIdx + 1];
+      const curZ = sorted[sortIdx].zIndex;
+      const belowZ = below.zIndex;
+      return {
+        ...scene,
+        sources: sources.map(s => {
+          if (s.id === sourceId) return { ...s, zIndex: belowZ };
+          if (s.id === below.id) return { ...s, zIndex: curZ };
+          return s;
+        })
+      };
+    }));
+  };
+
+  // Source type icon helper
+  const getSourceIcon = (type: string) => {
+    switch (type) {
+      case 'screen': return <Tv size={13} color="#8B5CF6" />;
+      case 'window': return <Monitor size={13} color="#38BDF8" />;
+      case 'game': return <Gamepad2 size={13} color="#F97316" />;
+      case 'camera': return <Camera size={13} color="#10B981" />;
+      case 'image': return <ImageIcon size={13} color="#38BDF8" />;
+      case 'text': return <Type size={13} color="#F472B6" />;
+      case 'color': return <Palette size={13} color="#F59E0B" />;
+      case 'video': return <VideoIcon size={13} color="#EC4899" />;
+      default: return <Layers size={13} />;
+    }
+  };
+
+  const dBFromLevel = (level: number): string => {
+    if (level <= 0) return '-∞';
+    const db = 20 * Math.log10(level / 100);
+    return db > 0 ? `+${db.toFixed(0)}` : db.toFixed(0);
+  };
+
   return (
-    <div style={appContainerStyle}>
-      {/* Top Header Bar */}
-      <header style={headerStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      width: '100%',
+      overflow: 'hidden',
+      background: '#0C1021',
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+      color: '#E2E8F0'
+    }}>
+      {/* ═══════════ HEADER BAR ═══════════ */}
+      <header style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '6px 16px',
+        background: 'linear-gradient(180deg, #0F1524 0%, #0B0F1A 100%)',
+        borderBottom: '1px solid rgba(51, 65, 85, 0.4)',
+        zIndex: 10,
+        flexShrink: 0,
+        gap: '12px'
+      }}>
+        {/* Left: Logo & Title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
           <img
             src="/0logov3.png"
             alt="BOBS Logo"
-            style={{ height: '32px', filter: 'drop-shadow(0 0 6px rgba(95, 93, 236, 0.4))' }}
+            className="header-logo"
           />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={logoTextStyle}>BOBS Studio</span>
-            <span style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 600 }}>Bun Open Broadcasting Software</span>
+            <span style={{
+              fontSize: '1.05rem',
+              fontWeight: 800,
+              background: 'linear-gradient(135deg, #FFFFFF 0%, #A5B4FC 50%, #6366F1 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              letterSpacing: '-0.5px',
+              lineHeight: 1.2
+            }}>BOBS Studio</span>
+            <span style={{ fontSize: '0.58rem', color: '#475569', fontWeight: 600, letterSpacing: '0.3px' }}>
+              Bun Open Broadcasting Software
+            </span>
           </div>
         </div>
 
-        {/* Live System stats tickers */}
-        <div style={statsGridStyle}>
-          <div style={statBoxStyle}>
-            <span style={statLabelStyle}>STATUS</span>
-            <span style={{ ...statValueStyle, color: wsConnected ? '#10B981' : '#F59E0B' }}>
-              {wsConnected ? 'Connected' : 'Offline'}
+        {/* Center: Stat Pills */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {/* STATUS */}
+          <div className="stat-pill">
+            <span className={`conn-dot ${wsConnected ? 'connected' : 'disconnected'}`} />
+            <span className="stat-label">STATUS</span>
+            <span className="stat-value" style={{ color: wsConnected ? '#10B981' : '#F59E0B' }}>
+              {wsConnected ? 'ON' : 'OFF'}
             </span>
           </div>
 
-          <div style={statBoxStyle}>
-            <span style={statLabelStyle}>LIVE</span>
-            <span style={serverStatus.isStreaming ? badgeLiveStyle : statValueStyle}>
-              {serverStatus.isStreaming ? formatClock(streamTime) : '00:00:00'}
+          {/* LIVE */}
+          <div className="stat-pill" style={serverStatus.isStreaming ? { borderColor: 'rgba(239, 68, 68, 0.4)' } : {}}>
+            {serverStatus.isStreaming && <span className="live-dot" />}
+            <span className="stat-label">LIVE</span>
+            <span className="stat-value" style={serverStatus.isStreaming ? { color: '#EF4444', textShadow: '0 0 6px rgba(239,68,68,0.4)' } : {}}>
+              {serverStatus.isStreaming ? formatClock(streamTime) : '00:00'}
             </span>
           </div>
 
-          <div style={statBoxStyle}>
-            <span style={statLabelStyle}>REC</span>
-            <span style={serverStatus.isRecording ? badgeRecStyle : statValueStyle}>
-              {serverStatus.isRecording ? formatClock(recordTime) : '00:00:00'}
+          {/* REC */}
+          <div className="stat-pill" style={serverStatus.isRecording ? { borderColor: 'rgba(16, 185, 129, 0.4)' } : {}}>
+            {serverStatus.isRecording && <span className="rec-dot" />}
+            <span className="stat-label">REC</span>
+            <span className="stat-value" style={serverStatus.isRecording ? { color: '#10B981', textShadow: '0 0 6px rgba(16,185,129,0.4)' } : {}}>
+              {serverStatus.isRecording ? formatClock(recordTime) : '00:00'}
             </span>
           </div>
 
-          <div style={statBoxStyle}>
-            <span style={statLabelStyle}>FPS</span>
-            <span style={statValueStyle}>{serverStatus.fps.toFixed(2)}</span>
+          {/* FPS */}
+          <div className="stat-pill">
+            <span className="stat-label">FPS</span>
+            <span className="stat-value">{serverStatus.fps.toFixed(1)}</span>
           </div>
 
-          <div style={statBoxStyle}>
-            <span style={statLabelStyle}>CPU</span>
-            <span style={statValueStyle}>{serverStatus.cpuUsage.toFixed(1)}%</span>
+          {/* CPU */}
+          <div className="stat-pill">
+            <span className="stat-label">CPU</span>
+            <span className="stat-value">{serverStatus.cpuUsage.toFixed(0)}%</span>
+          </div>
+
+          {/* VIEWERS */}
+          <div className="stat-pill">
+            <span className="stat-label">VIEWERS</span>
+            <span className="stat-value" style={{ color: serverStatus.viewerCount > 0 ? '#8B5CF6' : undefined }}>
+              {serverStatus.viewerCount}
+            </span>
+          </div>
+
+          {/* VCAM */}
+          <div className="stat-pill" style={serverStatus.isVirtualCamActive ? { borderColor: 'rgba(139, 92, 246, 0.4)' } : {}}>
+            <span className="stat-label">VCAM</span>
+            <span className="stat-value" style={{
+              color: serverStatus.isVirtualCamActive ? '#A78BFA' : undefined,
+              textShadow: serverStatus.isVirtualCamActive ? '0 0 6px rgba(139,92,246,0.5)' : 'none'
+            }}>
+              {serverStatus.isVirtualCamActive ? 'ON' : 'OFF'}
+            </span>
           </div>
         </div>
 
-        {/* Header Controls */}
-        <div style={{ display: 'flex', gap: '10px' }}>
+        {/* Right: Action Buttons */}
+        <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
           <input
             type="file"
             ref={fileInputRef}
@@ -820,177 +1570,284 @@ export const App: React.FC = () => {
             style={{ display: 'none' }}
           />
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="btn-secondary"
-            style={{ padding: '8px 12px', fontSize: '0.8rem' }}
-            title="Import Scene Collection"
+            onClick={() => window.open(`http://${window.location.hostname}:3001/view`, '_blank')}
+            className="header-btn"
+            title="Open Web-NDI Viewer in new tab"
           >
-            <Upload size={14} /> Import Setup
+            <Monitor size={13} /> Viewer
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="header-btn"
+            title="Import Scene Collection (JSON)"
+          >
+            <Upload size={13} /> Import
           </button>
           <button
             onClick={handleExportSetup}
-            className="btn-secondary"
-            style={{ padding: '8px 12px', fontSize: '0.8rem' }}
-            title="Export Scene Collection"
+            className="header-btn"
+            title="Export Scene Collection (JSON)"
           >
-            <Download size={14} /> Export Setup
+            <Download size={13} /> Export
           </button>
           <button
             onClick={() => setStudioMode(!studioMode)}
-            style={studioMode ? activeStudioBtnStyle : studioBtnStyle}
+            className={`header-btn ${studioMode ? 'active' : ''}`}
+            title="Toggle Studio Mode (Preview + Program)"
           >
-            <Maximize2 size={15} /> Studio Mode
+            <Maximize2 size={13} /> Studio
           </button>
-          <button onClick={() => setIsSettingsOpen(true)} className="btn-secondary" style={{ padding: '8px' }}>
-            <Settings size={16} />
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="header-btn"
+            title="Settings"
+            style={{ padding: '5px 8px' }}
+          >
+            <Settings size={14} />
           </button>
         </div>
       </header>
 
-      {/* Main Studio Body Workspace */}
-      <main style={mainWorkspaceStyle}>
-        {/* Canvases View Panel */}
-        <div className="glass-panel" style={canvasContainerStyle}>
-          {/* Double Canvas View (Studio Mode) */}
-          <div style={{ display: 'flex', flex: 1, gap: '20px', padding: '16px', position: 'relative' }}>
-            {/* Left Preview Side */}
-            <div style={canvasBoxStyle}>
-              <div style={canvasHeaderLabelStyle}>
-                <span>PREVIEW</span>
-                <span style={{ color: '#6366F1', fontSize: '0.75rem' }}>Active Scene Editor</span>
+      {/* ═══════════ MAIN WORKSPACE ═══════════ */}
+      <main style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '8px',
+        gap: '8px',
+        minHeight: 0,
+        overflow: 'hidden'
+      }}>
+        {/* ───── Canvas Area ───── */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          gap: studioMode ? '0px' : '0px',
+          minHeight: 0,
+          background: '#080C16',
+          borderRadius: '6px',
+          border: '1px solid rgba(51, 65, 85, 0.3)',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            display: 'flex',
+            flex: 1,
+            gap: studioMode ? '0px' : '0px',
+            padding: '10px',
+            position: 'relative',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            {/* Left: Preview Canvas */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, gap: '2px' }}>
+              <div style={{
+                flex: 1,
+                position: 'relative',
+                background: '#040610',
+                borderRadius: '4px',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid rgba(51, 65, 85, 0.3)'
+              }}>
+                <span className="canvas-badge preview">Preview</span>
+                <canvas ref={previewCanvasRef} style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  display: 'block'
+                }} />
               </div>
-              <div style={canvasWrapperStyle}>
-                <canvas ref={previewCanvasRef} style={canvasElStyle} />
-              </div>
+              <div className="canvas-res-info">{width}×{height} • {streamConfig.fps}fps</div>
             </div>
 
-            {/* In-Between Transition Controls (Only visible in Studio mode) */}
+            {/* Center: Transition Controls (Studio Mode only) */}
             {studioMode && (
-              <div style={transitionControlsStyle}>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                width: '100px',
+                padding: '0 8px',
+                flexShrink: 0
+              }}>
                 <button
+                  className="transition-btn"
+                  onClick={() => compositor.triggerTransition(transitionType, transitionType === 'cut' ? 0 : transitionDuration)}
+                  title="Execute Transition (Ctrl+Alt+T)"
+                >
+                  <ArrowUpDown size={13} /> Transition
+                </button>
+                <div style={{ width: '100%', height: '1px', background: 'rgba(51, 65, 85, 0.4)', margin: '2px 0' }} />
+                <button
+                  className="transition-btn-secondary"
                   onClick={() => compositor.triggerTransition('cut')}
-                  className="btn-secondary"
-                  style={transBtnStyle}
+                  title="Cut transition (instant)"
                 >
                   Cut
                 </button>
                 <button
-                  onClick={() => compositor.triggerTransition('fade', 400)}
-                  className="btn-primary"
-                  style={transBtnStyle}
+                  className="transition-btn-secondary"
+                  onClick={() => compositor.triggerTransition('fade', transitionDuration)}
+                  title={`Fade transition (${transitionDuration}ms)`}
                 >
-                  Fade (400ms)
+                  Fade
                 </button>
                 <button
-                  onClick={() => compositor.triggerTransition('slide', 600)}
-                  className="btn-secondary"
-                  style={transBtnStyle}
+                  className="transition-btn-secondary"
+                  onClick={() => compositor.triggerTransition('slide', transitionDuration)}
+                  title={`Slide transition (${transitionDuration}ms)`}
                 >
-                  Slide (600ms)
+                  Slide
                 </button>
               </div>
             )}
 
-            {/* Right Program Side */}
+            {/* Right: Program Canvas (Studio Mode only) */}
             {studioMode && (
-              <div style={canvasBoxStyle}>
-                <div style={canvasHeaderLabelStyle}>
-                  <span>PROGRAM</span>
-                  <span style={{ color: '#EF4444', fontSize: '0.75rem' }}>Broadcast live feed</span>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, gap: '2px' }}>
+                <div style={{
+                  flex: 1,
+                  position: 'relative',
+                  background: '#040610',
+                  borderRadius: '4px',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid rgba(51, 65, 85, 0.3)'
+                }} className={serverStatus.isStreaming ? 'program-canvas-live' : ''}>
+                  <span className="canvas-badge program">Program</span>
+                  <canvas ref={programCanvasRef} style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    display: 'block'
+                  }} />
                 </div>
-                <div style={canvasWrapperStyle}>
-                  <canvas ref={programCanvasRef} style={{ ...canvasElStyle, border: '1px solid #EF4444' }} />
-                </div>
+                <div className="canvas-res-info">{width}×{height} • {streamConfig.fps}fps</div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Lower Control Decks Panel */}
-        <div style={bottomDecksGridStyle}>
-          {/* Deck 1: Scenes */}
-          <div className="glass-panel" style={deckStyle}>
-            <div style={deckHeaderStyle}>
-              <span style={deckTitleStyle}><Layers size={14} /> Scenes</span>
+        {/* ───── Bottom Panels (5 columns matching OBS) ───── */}
+        <div style={{
+          height: '240px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1.4fr 1.6fr 0.9fr 1fr',
+          gap: '6px',
+          flexShrink: 0
+        }}>
+          {/* ══ Column 1: Scenes ══ */}
+          <div className="panel-section">
+            <div className="panel-header">
+              <span className="panel-title"><Layers size={13} /> Scenes</span>
             </div>
-            <div style={deckBodyStyle}>
-              {scenes.map((scene) => (
+            <div className="panel-body">
+              {scenes.map((scene, idx) => (
                 <div
                   key={scene.id}
-                  className={`list-item ${scene.id === activeSceneId ? 'active' : ''}`}
+                  className={`scene-item ${scene.id === activeSceneId ? 'active' : ''}`}
                   onClick={() => {
                     setActiveSceneId(scene.id);
                     compositor.setActiveScene(scene.id);
                   }}
+                  onDoubleClick={() => {
+                    setRenamingSceneId(scene.id);
+                    setRenameValue(scene.name);
+                  }}
+                  title={`Scene ${idx + 1} — Press ${idx + 1} to switch`}
                 >
-                  <span className="list-item-title">{scene.name}</span>
-                  {scene.id === programSceneId && <span style={badgeLiveMiniStyle}>LIVE</span>}
+                  {renamingSceneId === scene.id ? (
+                    <input
+                      className="scene-rename-input"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => handleRenameScene(scene.id, renameValue)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRenameScene(scene.id, renameValue);
+                        if (e.key === 'Escape') setRenamingSceneId(null);
+                      }}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <>
+                      <span style={{ fontSize: '0.78rem' }}>{scene.name}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {scene.id === programSceneId && <span className="live-tag">LIVE</span>}
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Deck 2: Sources */}
-          <div className="glass-panel" style={deckStyle}>
-            <div style={deckHeaderStyle}>
-              <span style={deckTitleStyle}><Sliders size={14} /> Sources: {activeScene?.name}</span>
-              <button onClick={() => setIsAddSourceOpen(true)} className="btn-primary" style={addSourceBtnStyle}>
-                <Plus size={14} /> Add
+            <div className="panel-toolbar">
+              <button className="panel-toolbar-btn" onClick={handleAddScene} title="Add Scene">
+                <Plus size={14} />
+              </button>
+              <button className="panel-toolbar-btn" onClick={handleRemoveScene} title="Remove Scene">
+                <Minus size={14} />
               </button>
             </div>
-            <div style={deckBodyStyle}>
+          </div>
+
+          {/* ══ Column 2: Sources ══ */}
+          <div className="panel-section">
+            <div className="panel-header">
+              <span className="panel-title"><Sliders size={13} /> Sources</span>
+            </div>
+            <div className="panel-body">
               {activeScene?.sources.length === 0 ? (
-                <div style={emptyDeckStyle}>No sources in this scene.</div>
+                <div className="empty-panel">No sources in this scene.</div>
               ) : (
                 activeScene?.sources
                   .slice()
-                  .sort((a, b) => b.zIndex - a.zIndex) // Display list front-to-back (topmost layer on top)
+                  .sort((a, b) => b.zIndex - a.zIndex)
                   .map((src) => (
                     <div
                       key={src.id}
-                      className={`list-item ${src.id === selectedSourceId ? 'active' : ''}`}
+                      className={`source-item ${src.id === selectedSourceId ? 'active' : ''}`}
                       onClick={() => compositor.setSelectedSource(src.id)}
                     >
-                      <div className="list-item-title">
-                        {src.type === 'screen' && <Tv size={14} color="#8B5CF6" />}
-                        {src.type === 'window' && <Monitor size={14} color="#38BDF8" />}
-                        {src.type === 'game' && <Gamepad2 size={14} color="#F97316" />}
-                        {src.type === 'camera' && <Camera size={14} color="#10B981" />}
-                        {src.type === 'image' && <ImageIcon size={14} color="#38BDF8" />}
-                        {src.type === 'text' && <Type size={14} color="#F472B6" />}
-                        {src.type === 'color' && <Palette size={14} color="#F59E0B" />}
-                        {src.type === 'video' && <VideoIcon size={14} color="#EC4899" />}
+                      <div className="source-info">
+                        {getSourceIcon(src.type)}
                         <span>{src.name}</span>
                       </div>
-
-                      <div className="list-item-actions">
+                      <div className="source-actions">
                         {/* Activate capture source */}
                         {isCapturableSource(src) && !isSourceMediaActive(src) && (
                           <button
-                            className="list-action-btn"
+                            className="src-action-btn"
                             title={`Activate ${getCaptureLabel(src)}`}
                             onClick={async (e) => {
                               e.stopPropagation();
                               await activateSourceMedia(src);
                             }}
                           >
-                            <Play size={13} color="#10B981" />
+                            <Play size={12} color="#10B981" />
                           </button>
                         )}
                         {/* Visible toggle */}
                         <button
-                          className="list-action-btn"
+                          className="src-action-btn"
+                          title={src.visible ? 'Hide source' : 'Show source'}
                           onClick={(e) => {
                             e.stopPropagation();
                             updateSource(src.id, { visible: !src.visible });
                           }}
                         >
-                          {src.visible ? <Eye size={13} /> : <EyeOff size={13} color="#EF4444" />}
+                          {src.visible ? <Eye size={12} /> : <EyeOff size={12} color="#EF4444" />}
                         </button>
                         {/* Audio Mute toggle */}
                         {(src.type === 'camera' || src.type === 'screen' || src.type === 'window' || src.type === 'game' || src.type === 'video') && (
                           <button
-                            className="list-action-btn"
+                            className="src-action-btn"
+                            title={src.muted ? 'Unmute audio' : 'Mute audio'}
                             onClick={(e) => {
                               e.stopPropagation();
                               const muted = !src.muted;
@@ -998,12 +1855,12 @@ export const App: React.FC = () => {
                               audioMixer.setMute(src.id, muted);
                             }}
                           >
-                            {src.muted ? <VolumeX size={13} color="#EF4444" /> : <Volume2 size={13} />}
+                            {src.muted ? <VolumeX size={12} color="#EF4444" /> : <Volume2 size={12} />}
                           </button>
                         )}
-                        {/* Filters configuration */}
+                        {/* Filters */}
                         <button
-                          className="list-action-btn"
+                          className="src-action-btn"
                           title="Filters (Chroma Key, Gates, Compression)"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1011,121 +1868,291 @@ export const App: React.FC = () => {
                             setIsFiltersOpen(true);
                           }}
                         >
-                          <Sliders size={13} color="#A5B4FC" />
-                        </button>
-                        {/* Delete source */}
-                        <button
-                          className="list-action-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteSource(src.id);
-                          }}
-                        >
-                          <Trash2 size={13} color="#EF4444" />
+                          <Sliders size={12} color="#A5B4FC" />
                         </button>
                       </div>
                     </div>
                   ))
               )}
             </div>
+            <div className="panel-toolbar">
+              <button className="panel-toolbar-btn" onClick={() => setIsAddSourceOpen(true)} title="Add Source (+)">
+                <Plus size={14} />
+              </button>
+              <button
+                className="panel-toolbar-btn"
+                onClick={() => { if (selectedSourceId) deleteSource(selectedSourceId); }}
+                title="Remove Source (-)"
+              >
+                <Minus size={14} />
+              </button>
+              <button
+                className="panel-toolbar-btn"
+                onClick={() => { if (selectedSourceId) moveSourceUp(selectedSourceId); }}
+                title="Move Source Up (↑)"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <button
+                className="panel-toolbar-btn"
+                onClick={() => { if (selectedSourceId) moveSourceDown(selectedSourceId); }}
+                title="Move Source Down (↓)"
+              >
+                <ChevronDown size={14} />
+              </button>
+            </div>
           </div>
 
-          {/* Deck 3: Audio Mixer */}
-          <div className="glass-panel" style={deckStyle}>
-            <div style={deckHeaderStyle}>
-              <span style={deckTitleStyle}><Volume2 size={14} /> Audio Mixer</span>
+          {/* ══ Column 3: Audio Mixer ══ */}
+          <div className="panel-section">
+            <div className="panel-header">
+              <span className="panel-title"><Volume2 size={13} /> Audio Mixer</span>
             </div>
-            <div style={{ ...deckBodyStyle, display: 'flex', gap: '20px', overflowX: 'auto', flexDirection: 'row' }}>
+            <div className="panel-body" style={{ display: 'flex', flexDirection: 'row', gap: '6px', overflowX: 'auto', padding: '6px' }}>
               {activeScene?.sources
                 .filter((s) => s.type === 'camera' || s.type === 'screen' || s.type === 'window' || s.type === 'game' || s.type === 'video')
                 .map((src) => {
                   const level = audioLevels[src.id] || 0;
+                  // Simulate a slight L/R difference for visual realism
+                  const levelL = Math.min(100, level + (Math.random() * 4 - 2));
+                  const levelR = Math.min(100, level + (Math.random() * 4 - 2));
                   return (
-                    <div key={src.id} style={mixerStripStyle}>
-                      <span style={mixerStripLabelStyle}>{src.name}</span>
+                    <div key={src.id} className="mixer-strip">
+                      <span className="mixer-strip-name">{src.name}</span>
                       
-                      {/* Vertical decibel bar */}
-                      <div className="db-meter-track" style={{ width: '12px', height: '100px' }}>
-                        <div
-                          className="db-meter-fill"
-                          style={{ height: `${level}%` }}
-                        />
+                      {/* Dual vertical dB meter bars (L/R) */}
+                      <div className="mixer-meters">
+                        <div className="mixer-meter-track">
+                          <div
+                            className="mixer-meter-fill left"
+                            style={{ height: `${Math.max(0, levelL)}%` }}
+                          />
+                        </div>
+                        <div className="mixer-meter-track">
+                          <div
+                            className="mixer-meter-fill right"
+                            style={{ height: `${Math.max(0, levelR)}%` }}
+                          />
+                        </div>
                       </div>
 
-                      {/* Slider and mute btn */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', width: '100%' }}>
+                      {/* dB readout */}
+                      <span className="mixer-db-label">{dBFromLevel(level)} dB</span>
+
+                      {/* Horizontal volume fader */}
+                      <div className="mixer-fader">
                         <input
                           type="range"
                           min="0"
                           max="1"
                           step="0.05"
-                          className="volume-slider"
                           value={src.volume}
                           onChange={(e) => {
                             const val = Number(e.target.value);
                             updateSource(src.id, { volume: val });
                             audioMixer.setVolume(src.id, val);
                           }}
-                          style={{ transform: 'rotate(-90deg)', width: '60px', height: '10px', margin: '20px 0' }}
+                          title={`Volume: ${Math.round(src.volume * 100)}%`}
                         />
-                        <button
-                          onClick={() => {
-                            const muted = !src.muted;
-                            updateSource(src.id, { muted });
-                            audioMixer.setMute(src.id, muted);
-                          }}
-                          style={src.muted ? mixerMutedBtnStyle : mixerAudioBtnStyle}
-                        >
-                          {src.muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
-                        </button>
                       </div>
+
+                      {/* Mute button */}
+                      <button
+                        className={`mixer-mute-btn ${src.muted ? 'muted' : ''}`}
+                        onClick={() => {
+                          const muted = !src.muted;
+                          updateSource(src.id, { muted });
+                          audioMixer.setMute(src.id, muted);
+                        }}
+                        title={src.muted ? 'Unmute' : 'Mute'}
+                      >
+                        {src.muted ? <VolumeX size={11} /> : <Volume2 size={11} />}
+                      </button>
                     </div>
                   );
                 })}
               {activeScene?.sources.filter((s) => s.type === 'camera' || s.type === 'screen' || s.type === 'window' || s.type === 'game' || s.type === 'video').length === 0 && (
-                <div style={emptyDeckStyle}>No audio inputs active.</div>
+                <div className="empty-panel" style={{ flex: 1 }}>No audio inputs active.</div>
               )}
             </div>
           </div>
 
-          {/* Deck 4: Controls */}
-          <div className="glass-panel" style={{ ...deckStyle, background: '#121726', borderColor: 'rgba(95, 93, 236, 0.2)' }}>
-            <div style={deckHeaderStyle}>
-              <span style={{ ...deckTitleStyle, color: '#A5B4FC' }}><Radio size={14} /> Control Board</span>
+          {/* ══ Column 4: Scene Transitions ══ */}
+          <div className="panel-section">
+            <div className="panel-header">
+              <span className="panel-title"><ArrowUpDown size={13} /> Transitions</span>
             </div>
-            <div style={{ ...deckBodyStyle, justifyContent: 'center', gap: '12px' }}>
+            <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px' }}>
+              {/* Transition type selector */}
+              <label style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 600, letterSpacing: '0.5px' }}>TYPE</label>
+              <select
+                className="transition-select"
+                value={transitionType}
+                onChange={(e) => setTransitionType(e.target.value as 'cut' | 'fade' | 'slide')}
+              >
+                <option value="cut">Cut</option>
+                <option value="fade">Fade</option>
+                <option value="slide">Slide</option>
+              </select>
+
+              {/* Duration input */}
+              <label style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 600, letterSpacing: '0.5px' }}>DURATION (ms)</label>
+              <input
+                type="number"
+                className="transition-duration-input"
+                value={transitionDuration}
+                min={0}
+                max={5000}
+                step={50}
+                onChange={(e) => setTransitionDuration(Number(e.target.value))}
+              />
+
+              {/* Transition execute button */}
+              <button
+                className="transition-btn"
+                onClick={() => compositor.triggerTransition(transitionType, transitionType === 'cut' ? 0 : transitionDuration)}
+                title="Execute Transition (Ctrl+Alt+T)"
+                style={{ marginTop: '4px' }}
+              >
+                <ArrowUpDown size={13} /> Transition
+              </button>
+            </div>
+          </div>
+
+          {/* ══ Column 5: Controls ══ */}
+          <div className="panel-section" style={{ borderColor: 'rgba(99, 102, 241, 0.2)' }}>
+            <div className="panel-header">
+              <span className="panel-title" style={{ color: '#A5B4FC' }}><Radio size={13} /> Controls</span>
+            </div>
+            <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: '5px', padding: '8px', justifyContent: 'center' }}>
               {/* Streaming */}
               {serverStatus.isStreaming ? (
-                <button onClick={stopStreaming} className="btn-danger" style={ctrlBtnStyle}>
-                  <Square size={16} /> Stop Streaming
+                <button
+                  onClick={stopStreaming}
+                  className={`ctrl-btn streaming-active`}
+                  title="Stop Streaming (Ctrl+Alt+S)"
+                >
+                  <Square size={14} /> Stop Streaming
                 </button>
               ) : (
-                <button onClick={startStreaming} className="btn-primary" style={ctrlBtnStyle}>
-                  <Play size={16} /> Start Streaming
+                <button
+                  onClick={startStreaming}
+                  className="ctrl-btn primary-action"
+                  title="Start Streaming (Ctrl+Alt+S)"
+                >
+                  <Play size={14} /> Start Streaming
                 </button>
               )}
 
               {/* Recording */}
               {serverStatus.isRecording ? (
-                <button onClick={stopRecording} className="btn-danger" style={ctrlBtnStyle}>
-                  <Square size={16} /> Stop Recording
+                <button
+                  onClick={stopRecording}
+                  className={`ctrl-btn recording-active`}
+                  title="Stop Recording (Ctrl+Alt+R)"
+                >
+                  <Square size={14} /> Stop Recording
                 </button>
               ) : (
-                <button onClick={startRecording} className="btn-secondary" style={ctrlBtnStyle}>
-                  <Play size={16} /> Start Recording
+                <button
+                  onClick={startRecording}
+                  className="ctrl-btn"
+                  title="Start Recording (Ctrl+Alt+R)"
+                >
+                  <Disc size={14} /> Start Recording
                 </button>
               )}
 
-              <div style={recordingStatusTipStyle}>
-                <Info size={12} />
-                <span>FFmpeg backend pipeline ready.</span>
-              </div>
+              {/* Virtual Camera */}
+              {serverStatus.isVirtualCamActive ? (
+                <button
+                  onClick={stopVirtualCam}
+                  className="ctrl-btn vcam-active"
+                  title="Stop Virtual Camera"
+                >
+                  <Square size={14} /> Stop Virtual Cam
+                </button>
+              ) : (
+                <button
+                  onClick={startVirtualCam}
+                  className="ctrl-btn"
+                  title="Start Virtual Camera"
+                >
+                  <ScreenShare size={14} /> Start Virtual Cam
+                </button>
+              )}
+
+              {/* Studio Mode */}
+              <button
+                onClick={() => setStudioMode(!studioMode)}
+                className={`ctrl-btn ${studioMode ? 'studio-active' : ''}`}
+                title="Toggle Studio Mode"
+              >
+                <Maximize2 size={14} /> Studio Mode
+              </button>
+
+              {/* Settings */}
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="ctrl-btn"
+                title="Open Settings"
+              >
+                <Settings size={14} /> Settings
+              </button>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Modals */}
+      {/* ═══════════ BOTTOM STATUS BAR ═══════════ */}
+      <div className="status-bar">
+        <div className="status-bar-left">
+          <div className="status-bar-item">
+            <span className={`conn-dot ${wsConnected ? 'connected' : 'disconnected'}`} style={{ width: 6, height: 6 }} />
+            <span>{wsConnected ? 'Connected' : 'Disconnected'}</span>
+          </div>
+          {serverStatus.isStreaming && (
+            <div className="status-bar-item" style={{ color: '#EF4444' }}>
+              <span className="live-dot" style={{ width: 5, height: 5 }} />
+              <span>LIVE</span>
+              <span className="mono" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatClock(streamTime)}</span>
+            </div>
+          )}
+          {serverStatus.isRecording && (
+            <div className="status-bar-item" style={{ color: '#10B981' }}>
+              <span className="rec-dot" style={{ width: 5, height: 5 }} />
+              <span>REC</span>
+              <span className="mono" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{formatClock(recordTime)}</span>
+            </div>
+          )}
+          {serverStatus.isBroadcasting && (
+            <div className="status-bar-item" style={{ color: '#8B5CF6' }}>
+              <Wifi size={10} /> BROADCAST
+            </div>
+          )}
+        </div>
+        <div className="status-bar-right">
+          <div className="status-bar-item">
+            <span>CPU:</span>
+            <span className="mono" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{serverStatus.cpuUsage.toFixed(1)}%</span>
+          </div>
+          <div className="status-bar-item">
+            <span>FPS:</span>
+            <span className="mono" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{serverStatus.fps.toFixed(2)}</span>
+          </div>
+          <div className="status-bar-item" style={{
+            background: 'rgba(51, 65, 85, 0.3)',
+            padding: '1px 6px',
+            borderRadius: '3px',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '0.6rem'
+          }}>
+            {width}×{height}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════════ MODALS ═══════════ */}
       <AddSourceModal
         isOpen={isAddSourceOpen}
         onClose={() => setIsAddSourceOpen(false)}
@@ -1153,271 +2180,4 @@ export const App: React.FC = () => {
   );
 };
 
-// Styling definitions
-const appContainerStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%',
-  width: '100%',
-  overflow: 'hidden'
-};
-
-const headerStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 24px',
-  background: 'var(--bg-panel)',
-  borderBottom: '1px solid var(--border-color)',
-  zIndex: 10
-};
-
-const logoTextStyle: React.CSSProperties = {
-  fontSize: '1.2rem',
-  fontWeight: 800,
-  background: 'linear-gradient(135deg, #FFF, #C7D2FE)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
-  letterSpacing: '-0.5px'
-};
-
-const statsGridStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '24px'
-};
-
-const statBoxStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: '2px'
-};
-
-const statLabelStyle: React.CSSProperties = {
-  fontSize: '0.62rem',
-  fontWeight: 700,
-  color: 'var(--text-muted)',
-  letterSpacing: '0.5px'
-};
-
-const statValueStyle: React.CSSProperties = {
-  fontSize: '0.85rem',
-  fontWeight: 600,
-  color: 'var(--text-primary)'
-};
-
-const badgeLiveStyle: React.CSSProperties = {
-  ...statValueStyle,
-  color: 'var(--danger)',
-  textShadow: '0 0 8px rgba(239, 68, 68, 0.4)'
-};
-
-const badgeRecStyle: React.CSSProperties = {
-  ...statValueStyle,
-  color: 'var(--success)',
-  textShadow: '0 0 8px rgba(16, 185, 129, 0.4)'
-};
-
-const studioBtnStyle: React.CSSProperties = {
-  background: '#1E293B',
-  border: '1px solid var(--border-color)',
-  color: 'var(--text-primary)',
-  fontSize: '0.8rem',
-  padding: '6px 12px'
-};
-
-const activeStudioBtnStyle: React.CSSProperties = {
-  ...studioBtnStyle,
-  background: 'rgba(95, 93, 236, 0.12)',
-  borderColor: 'var(--accent)',
-  color: '#A5B4FC'
-};
-
-const mainWorkspaceStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '16px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '16px',
-  minHeight: 0
-};
-
-const canvasContainerStyle: React.CSSProperties = {
-  flex: 1,
-  display: 'flex',
-  minHeight: 0,
-  background: 'rgba(14, 18, 30, 0.6)'
-};
-
-const canvasBoxStyle: React.CSSProperties = {
-  flex: 1,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '8px',
-  minWidth: 0
-};
-
-const canvasHeaderLabelStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  fontSize: '0.78rem',
-  fontWeight: 700,
-  color: 'var(--text-secondary)',
-  padding: '0 4px'
-};
-
-const canvasWrapperStyle: React.CSSProperties = {
-  flex: 1,
-  position: 'relative',
-  background: '#04060A',
-  border: '1px solid var(--border-color)',
-  borderRadius: '8px',
-  overflow: 'hidden',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center'
-};
-
-const canvasElStyle: React.CSSProperties = {
-  width: '100%',
-  height: '100%',
-  objectFit: 'contain',
-  display: 'block'
-};
-
-const transitionControlsStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '12px',
-  width: '110px'
-};
-
-const transBtnStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 4px',
-  fontSize: '0.75rem',
-  whiteSpace: 'nowrap'
-};
-
-const bottomDecksGridStyle: React.CSSProperties = {
-  height: '220px',
-  display: 'grid',
-  gridTemplateColumns: '1.2fr 1.6fr 1.6fr 1.4fr',
-  gap: '16px'
-};
-
-const deckStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  minWidth: 0
-};
-
-const deckHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '10px 14px',
-  background: 'var(--bg-panel-header)',
-  borderBottom: '1px solid var(--border-color)'
-};
-
-const deckTitleStyle: React.CSSProperties = {
-  fontSize: '0.8rem',
-  fontWeight: 700,
-  color: 'var(--text-secondary)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px'
-};
-
-const deckBodyStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '12px',
-  overflowY: 'auto',
-  display: 'flex',
-  flexDirection: 'column'
-};
-
-const emptyDeckStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  height: '100%',
-  color: 'var(--text-muted)',
-  fontSize: '0.8rem'
-};
-
-const addSourceBtnStyle: React.CSSProperties = {
-  padding: '4px 10px',
-  fontSize: '0.75rem',
-  borderRadius: '4px'
-};
-
-const badgeLiveMiniStyle: React.CSSProperties = {
-  background: 'rgba(239, 68, 68, 0.15)',
-  color: 'var(--danger)',
-  border: '1px solid rgba(239, 68, 68, 0.3)',
-  padding: '2px 6px',
-  borderRadius: '4px',
-  fontSize: '0.62rem',
-  fontWeight: 700
-};
-
-const mixerStripStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: '8px',
-  background: 'rgba(20, 26, 41, 0.2)',
-  padding: '8px',
-  borderRadius: '6px',
-  width: '76px',
-  border: '1px solid var(--border-color)',
-  flexShrink: 0
-};
-
-const mixerStripLabelStyle: React.CSSProperties = {
-  fontSize: '0.65rem',
-  color: 'var(--text-secondary)',
-  fontWeight: 600,
-  textAlign: 'center',
-  width: '100%',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap'
-};
-
-const mixerAudioBtnStyle: React.CSSProperties = {
-  background: '#1E293B',
-  border: '1px solid var(--border-color)',
-  padding: '4px 6px',
-  borderRadius: '4px',
-  color: '#FFF'
-};
-
-const mixerMutedBtnStyle: React.CSSProperties = {
-  ...mixerAudioBtnStyle,
-  background: 'rgba(239, 68, 68, 0.15)',
-  borderColor: 'rgba(239, 68, 68, 0.3)',
-  color: 'var(--danger)'
-};
-
-const ctrlBtnStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '10px'
-};
-
-const recordingStatusTipStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '6px',
-  fontSize: '0.72rem',
-  color: 'var(--text-muted)',
-  marginTop: '6px'
-};
 export default App;
